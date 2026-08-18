@@ -131,25 +131,24 @@ abrir porta no roteador.
 **1. Instale o
 [`cloudflared`](https://github.com/cloudflare/cloudflared/releases/latest).**
 
-**2. Suba em modo produção.** Uma porta só, e o cookie de sessão sai `Secure`,
-como o HTTPS do túnel pede.
+**2. Rode um comando só.**
 
 ```sh
-pnpm build
-pnpm start
+pnpm share
 ```
 
-**3. Abra o túnel, em outro terminal.**
+Ele monta o cliente, sobe o servidor em modo produção — porta única, e o cookie
+de sessão sai `Secure`, como o HTTPS do túnel pede — e abre o túnel na frente,
+anunciando a URL assim que ela existe:
 
-```sh
-cloudflared tunnel --url http://localhost:8787
+```
+  Room reachable at https://<quatro-palavras>.trycloudflare.com
 ```
 
-Ele imprime uma URL do tipo `https://<quatro-palavras>.trycloudflare.com`. Mande
-para os amigos junto com a `ROOM_PASSWORD`, e peça que abram no Chrome/Chromium
-(ver "Limitações conhecidas"). Qualquer um com a URL cai na tela de login, então
-o portão continua sendo a senha. Derrubar o túnel mata o endereço; a próxima
-execução sorteia outro.
+Mande a URL para os amigos junto com a `ROOM_PASSWORD`, e peça que abram no
+Chrome/Chromium (ver "Limitações conhecidas"). Qualquer um com a URL cai na tela
+de login, então o portão continua sendo a senha. `Ctrl+C` derruba servidor e
+túnel juntos, e o endereço morre com eles; a próxima execução sorteia outro.
 
 Para exercitar o app em desenvolvimento, aponte o túnel para o Vite
 (`cloudflared tunnel --url http://localhost:5173`) em vez do Node — é por isso
@@ -194,6 +193,7 @@ ambiente só no boot. O túnel segue de pé e a URL não muda.
 | `client/src/useBroadcast.ts` | Publica a tela no SFU e anuncia para a sala |
 | `client/src/tracks.ts` | Singletons do PartyTracks e os tetos de 720p30 / 2,5 Mbps |
 | `client/src/components/Stage.tsx` | Painel principal: prévia local ou track remota |
+| `scripts/share.ts` | Build, servidor e túnel num comando (`pnpm share`) |
 
 ```sh
 pnpm test        # vitest

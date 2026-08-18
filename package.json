@@ -11,6 +11,7 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "NODE_ENV=production tsx --env-file=.env server/main.ts",
+    "share": "tsx --env-file=.env scripts/share.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
