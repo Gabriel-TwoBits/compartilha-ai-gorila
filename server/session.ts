@@ -84,15 +84,11 @@ export function verifySession(token: string | undefined): { nickname: string } |
   return { nickname: n }
 }
 
-/**
- * Cookie attributes. `Secure` is tied to production because the browser drops a
- * `Secure` cookie served over plain http, which is exactly how this runs on
- * localhost during development.
- */
+/** Cookie attributes. See `readSecureCookies` in env.ts for the `Secure` flag. */
 export const sessionCookieOptions = {
   httpOnly: true,
   sameSite: "Lax",
   path: "/",
   maxAge: SESSION_MAX_AGE_SECONDS,
-  secure: env.isProduction,
+  secure: env.secureCookies,
 } as const

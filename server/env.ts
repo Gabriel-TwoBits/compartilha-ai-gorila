@@ -48,7 +48,24 @@ function readPort(): number {
   return port
 }
 
+/**
+ * Whether the session cookie is marked `Secure`.
+ *
+ * It has to follow the transport, not the build: a browser silently drops a
+ * `Secure` cookie served over plain http, so a production build exercised on
+ * localhost would appear to accept the password and then never log anyone in.
+ * Defaults to on in production, which is where the app is behind TLS.
+ */
+function readSecureCookies(isProduction: boolean): boolean {
+  const raw = process.env.SECURE_COOKIES?.trim().toLowerCase()
+  if (raw === undefined || raw.length === 0) return isProduction
+  if (raw === "true") return true
+  if (raw === "false") return false
+  throw new Error(`SECURE_COOKIES must be "true" or "false", got "${raw}".`)
+}
+
 const required = readRequired()
+const isProduction = process.env.NODE_ENV === "production"
 
 export const env = Object.freeze({
   port: readPort(),
@@ -56,5 +73,6 @@ export const env = Object.freeze({
   sfuAppToken: required.SFU_APP_TOKEN,
   roomPassword: required.ROOM_PASSWORD,
   sessionSecret: required.SESSION_SECRET,
-  isProduction: process.env.NODE_ENV === "production",
+  isProduction,
+  secureCookies: readSecureCookies(isProduction),
 })
