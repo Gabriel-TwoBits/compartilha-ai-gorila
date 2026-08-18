@@ -25,6 +25,9 @@ export function RoomScreen({ nickname, onLogout }: Props) {
   /** Only records an explicit pick; the fallback is derived below. */
   const [pickedNickname, setPickedNickname] = useState<string | null>(null)
 
+  /** Whose broadcast the viewer asked to open. Nothing is pulled until they do. */
+  const [watchedNickname, setWatchedNickname] = useState<string | null>(null)
+
   const participants: Participant[] = signaling.room?.participants ?? []
   const you = signaling.room?.you ?? null
   const broadcasters = participants.filter((participant) => participant.broadcast !== null)
@@ -36,13 +39,20 @@ export function RoomScreen({ nickname, onLogout }: Props) {
     broadcasters[0] ??
     null
 
-  // Feeds the viewer counts everyone else sees. Keyed on the nickname rather
-  // than the participant object, which arrives fresh from JSON every snapshot.
   const selectedNickname = selected?.nickname ?? null
+
+  // Only the broadcast on screen is being pulled. Deriving it from `selected`
+  // covers both ways the stage falls back to the gate on its own: the viewer
+  // picking someone else, and the broadcaster stopping.
+  const isWatching = selectedNickname !== null && selectedNickname === watchedNickname
+
+  // Feeds the viewer counts everyone else sees, and reports only a broadcast
+  // actually being pulled.
+  const watchingNickname = isWatching ? selectedNickname : null
   const { send } = signaling
   useEffect(() => {
-    send({ type: "watching", nickname: selectedNickname })
-  }, [send, selectedNickname, signaling.connected])
+    send({ type: "watching", nickname: watchingNickname })
+  }, [send, watchingNickname, signaling.connected])
 
   async function handleLogout(): Promise<void> {
     await logout()
@@ -69,7 +79,12 @@ export function RoomScreen({ nickname, onLogout }: Props) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <Stage selected={selected} you={you} />
+        <Stage
+          selected={selected}
+          you={you}
+          isWatching={isWatching}
+          onWatch={() => setWatchedNickname(selectedNickname)}
+        />
         <Participants
           participants={participants}
           you={you}

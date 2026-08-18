@@ -136,6 +136,32 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
   )
 }
 
+/**
+ * Gate in front of someone else's broadcast. Pulling a track is what costs
+ * egress, so it waits for the viewer to ask for it rather than opening on its
+ * own — and the room reports nobody as watching until they do.
+ */
+function WatchGate({ nickname, onWatch }: { nickname: string; onWatch: () => void }) {
+  return (
+    <div className="flex size-full flex-col items-center justify-center gap-4 px-8 text-center">
+      <span className="flex size-20 items-center justify-center rounded-2xl bg-surface-raised text-4xl">
+        📡
+      </span>
+      <h2 className="text-lg font-semibold">{nickname} está transmitindo</h2>
+      <p className="max-w-md text-sm leading-relaxed text-ink-muted">
+        A transmissão só começa a ser baixada quando você abrir.
+      </p>
+      <button
+        type="button"
+        onClick={onWatch}
+        className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition hover:brightness-110"
+      >
+        ▶ Assistir transmissão
+      </button>
+    </div>
+  )
+}
+
 function EmptyStage() {
   return (
     <div className="flex size-full flex-col items-center justify-center gap-4 px-8 text-center">
@@ -155,9 +181,12 @@ function EmptyStage() {
 type Props = {
   selected: Participant | null
   you: string | null
+  /** Whether the viewer has opened `selected`'s broadcast. */
+  isWatching: boolean
+  onWatch: () => void
 }
 
-export function Stage({ selected, you }: Props) {
+export function Stage({ selected, you, isWatching, onWatch }: Props) {
   const border = "m-4 flex-1 overflow-hidden rounded-2xl border border-dashed border-edge"
 
   if (selected === null || selected.broadcast === null) {
@@ -168,10 +197,19 @@ export function Stage({ selected, you }: Props) {
     )
   }
 
+  // Our own screen comes from the local capture, so there is nothing to opt into.
   if (selected.nickname === you) {
     return (
       <section className={border}>
         <LocalPreview />
+      </section>
+    )
+  }
+
+  if (!isWatching) {
+    return (
+      <section className={border}>
+        <WatchGate nickname={selected.nickname} onWatch={onWatch} />
       </section>
     )
   }
