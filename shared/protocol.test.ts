@@ -59,6 +59,25 @@ describe("parseClientMessage", () => {
     const raw = JSON.stringify({ type: "broadcast-start", video: videoRef, audio: { sessionId: "x" } })
     expect(parseClientMessage(raw)).toBeNull()
   })
+
+  it("accepts a watch report naming a broadcaster", () => {
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: "carlinhos" }))).toEqual({
+      type: "watching",
+      nickname: "carlinhos",
+    })
+  })
+
+  it("accepts a watch report naming nobody", () => {
+    const expected = { type: "watching", nickname: null }
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: null }))).toEqual(expected)
+    expect(parseClientMessage(JSON.stringify({ type: "watching" }))).toEqual(expected)
+  })
+
+  it("drops a watch report whose nickname is neither a name nor absent", () => {
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: "" }))).toBeNull()
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: 7 }))).toBeNull()
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: {} }))).toBeNull()
+  })
 })
 
 describe("parseServerMessage", () => {

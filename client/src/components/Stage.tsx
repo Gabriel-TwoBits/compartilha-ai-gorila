@@ -154,10 +154,10 @@ function EmptyStage() {
 
 type Props = {
   selected: Participant | null
-  youId: string | null
+  you: string | null
 }
 
-export function Stage({ selected, youId }: Props) {
+export function Stage({ selected, you }: Props) {
   const border = "m-4 flex-1 overflow-hidden rounded-2xl border border-dashed border-edge"
 
   if (selected === null || selected.broadcast === null) {
@@ -168,7 +168,7 @@ export function Stage({ selected, youId }: Props) {
     )
   }
 
-  if (selected.id === youId) {
+  if (selected.nickname === you) {
     return (
       <section className={border}>
         <LocalPreview />

@@ -1,42 +1,94 @@
 import type { Broadcast, Participant } from "@shared/protocol"
 
 /**
- * The single room, held in memory.
+ * The single room, held in memory, keyed by nickname.
  *
  * There is no persistence on purpose: a room with nobody in it carries no state
  * worth keeping, and a restart of the server invalidates every SFU track anyway.
+ *
+ * A participant can hold several connections at once — a second tab, or the old
+ * socket of a reconnect that has not timed out yet. They only leave the room
+ * when the last one goes.
  */
 
 type Entry = {
-  id: string
   nickname: string
+  /** Connection ids currently held by this participant. */
+  connections: Set<string>
   broadcast: Broadcast | null
+  /** Which connection published the broadcast, so only it can retract it. */
+  broadcastOwner: string | null
+  /** Whose broadcast this participant is watching. */
+  watching: string | null
 }
 
 const participants = new Map<string, Entry>()
 
-export function join(id: string, nickname: string): void {
-  participants.set(id, { id, nickname, broadcast: null })
+function entryFor(nickname: string): Entry {
+  const existing = participants.get(nickname)
+  if (existing !== undefined) return existing
+
+  const created: Entry = {
+    nickname,
+    connections: new Set(),
+    broadcast: null,
+    broadcastOwner: null,
+    watching: null,
+  }
+  participants.set(nickname, created)
+  return created
 }
 
-export function leave(id: string): void {
-  participants.delete(id)
+export function join(connectionId: string, nickname: string): void {
+  entryFor(nickname).connections.add(connectionId)
+}
+
+export function leave(connectionId: string, nickname: string): void {
+  const entry = participants.get(nickname)
+  if (entry === undefined) return
+
+  entry.connections.delete(connectionId)
+
+  // The broadcast belongs to the connection that published it. A second tab
+  // closing must not take down the tab that is actually sharing a screen.
+  if (entry.broadcastOwner === connectionId) {
+    entry.broadcast = null
+    entry.broadcastOwner = null
+  }
+
+  if (entry.connections.size === 0) {
+    participants.delete(nickname)
+  }
 }
 
 /**
- * Records that a participant started broadcasting. A participant that vanished
- * between the message being sent and handled is ignored rather than resurrected.
+ * Records a broadcast. A participant broadcasting from a second connection
+ * replaces the first, matching what a viewer would see anyway: one screen per
+ * person.
  */
-export function startBroadcast(id: string, broadcast: Broadcast): void {
-  const entry = participants.get(id)
+export function startBroadcast(connectionId: string, nickname: string, broadcast: Broadcast): void {
+  const entry = participants.get(nickname)
   if (entry === undefined) return
+  if (!entry.connections.has(connectionId)) return
+
   entry.broadcast = broadcast
+  entry.broadcastOwner = connectionId
 }
 
-export function stopBroadcast(id: string): void {
-  const entry = participants.get(id)
+export function stopBroadcast(connectionId: string, nickname: string): void {
+  const entry = participants.get(nickname)
   if (entry === undefined) return
+  if (entry.broadcastOwner !== connectionId) return
+
   entry.broadcast = null
+  entry.broadcastOwner = null
+}
+
+/** Records whose broadcast a participant is showing, for the viewer counts. */
+export function setWatching(nickname: string, watching: string | null): void {
+  const entry = participants.get(nickname)
+  if (entry === undefined) return
+  entry.watching = watching
 }
 
 function copyBroadcast(broadcast: Broadcast | null): Broadcast | null {
@@ -47,12 +99,36 @@ function copyBroadcast(broadcast: Broadcast | null): Broadcast | null {
   return { video: { ...broadcast.video }, audio: { ...broadcast.audio } }
 }
 
+/**
+ * Viewers per broadcaster, built in one pass. Watching your own screen shows the
+ * local capture rather than a pull from the SFU, so it is not an audience.
+ */
+function viewersByBroadcaster(): Map<string, string[]> {
+  const viewers = new Map<string, string[]>()
+
+  for (const entry of participants.values()) {
+    if (entry.watching === null) continue
+    if (entry.watching === entry.nickname) continue
+
+    const existing = viewers.get(entry.watching)
+    if (existing === undefined) {
+      viewers.set(entry.watching, [entry.nickname])
+      continue
+    }
+    existing.push(entry.nickname)
+  }
+
+  return viewers
+}
+
 /** Deep copy, so callers cannot mutate the room by holding on to the snapshot. */
 export function snapshot(): Participant[] {
+  const viewers = viewersByBroadcaster()
+
   return [...participants.values()].map((entry) => ({
-    id: entry.id,
     nickname: entry.nickname,
     broadcast: copyBroadcast(entry.broadcast),
+    viewers: viewers.get(entry.nickname) ?? [],
   }))
 }
 

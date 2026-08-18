@@ -23,10 +23,17 @@ export type Broadcast = {
   audio: TrackRef | null
 }
 
+/**
+ * The nickname is the identity. Someone with two tabs open is one participant
+ * with two connections, not two people in the sidebar. The flip side is that two
+ * friends who pick the same nickname merge into one entry — acceptable in a room
+ * whose real gate is the shared password.
+ */
 export type Participant = {
-  id: string
   nickname: string
   broadcast: Broadcast | null
+  /** Nicknames watching this participant's broadcast, excluding themselves. */
+  viewers: string[]
 }
 
 /**
@@ -36,6 +43,7 @@ export type Participant = {
  */
 export type ServerMessage = {
   type: "state"
+  /** Our own nickname, so the UI can tell us apart from everyone else. */
   you: string
   participants: Participant[]
 }
@@ -44,6 +52,8 @@ export type ServerMessage = {
 export type ClientMessage =
   | { type: "broadcast-start"; video: TrackRef; audio: TrackRef | null }
   | { type: "broadcast-stop" }
+  /** Whose broadcast we are showing, or `null` when showing none. */
+  | { type: "watching"; nickname: string | null }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -87,6 +97,14 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     }
     case "broadcast-stop":
       return { type: "broadcast-stop" }
+    case "watching": {
+      const { nickname } = parsed
+      if (nickname === null || nickname === undefined) {
+        return { type: "watching", nickname: null }
+      }
+      if (typeof nickname !== "string" || nickname.length === 0) return null
+      return { type: "watching", nickname }
+    }
     default:
       return null
   }

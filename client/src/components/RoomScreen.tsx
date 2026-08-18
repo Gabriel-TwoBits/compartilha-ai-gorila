@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { Participant } from "@shared/protocol"
 import { logout } from "../api"
 import { useBroadcast } from "../useBroadcast"
@@ -23,16 +23,26 @@ export function RoomScreen({ nickname, onLogout }: Props) {
   const broadcast = useBroadcast(signaling)
 
   /** Only records an explicit pick; the fallback is derived below. */
-  const [pickedId, setPickedId] = useState<string | null>(null)
+  const [pickedNickname, setPickedNickname] = useState<string | null>(null)
 
   const participants: Participant[] = signaling.room?.participants ?? []
-  const youId = signaling.room?.you ?? null
+  const you = signaling.room?.you ?? null
   const broadcasters = participants.filter((participant) => participant.broadcast !== null)
 
   // Deriving rather than syncing with an effect: whoever was picked may have
   // stopped, in which case the first live broadcast takes over on its own.
   const selected =
-    broadcasters.find((participant) => participant.id === pickedId) ?? broadcasters[0] ?? null
+    broadcasters.find((participant) => participant.nickname === pickedNickname) ??
+    broadcasters[0] ??
+    null
+
+  // Feeds the viewer counts everyone else sees. Keyed on the nickname rather
+  // than the participant object, which arrives fresh from JSON every snapshot.
+  const selectedNickname = selected?.nickname ?? null
+  const { send } = signaling
+  useEffect(() => {
+    send({ type: "watching", nickname: selectedNickname })
+  }, [send, selectedNickname, signaling.connected])
 
   async function handleLogout(): Promise<void> {
     await logout()
@@ -59,12 +69,12 @@ export function RoomScreen({ nickname, onLogout }: Props) {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <Stage selected={selected} youId={youId} />
+        <Stage selected={selected} you={you} />
         <Participants
           participants={participants}
-          youId={youId}
-          selectedId={selected?.id ?? null}
-          onSelect={setPickedId}
+          you={you}
+          selectedNickname={selectedNickname}
+          onSelect={setPickedNickname}
         />
       </div>
 

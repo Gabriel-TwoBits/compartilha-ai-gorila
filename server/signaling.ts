@@ -31,6 +31,7 @@ export const webSocketServer = new WebSocketServer({ noServer: true }) as WebSoc
 
 type Client = {
   id: string
+  nickname: string
   ws: WSContext<WebSocketLike>
   /** Set on every pong, cleared on every probe. */
   alive: boolean
@@ -40,23 +41,26 @@ const clients = new Map<string, Client>()
 
 /**
  * Sends the current room to everyone. Serialized per client because each one
- * needs its own id echoed back in `you`.
+ * needs its own nickname echoed back in `you`.
  */
 function publishRoomState(): void {
   const participants = room.snapshot()
   for (const client of clients.values()) {
-    const message: ServerMessage = { type: "state", you: client.id, participants }
+    const message: ServerMessage = { type: "state", you: client.nickname, participants }
     client.ws.send(JSON.stringify(message))
   }
 }
 
-function applyMessage(id: string, message: ClientMessage): void {
+function applyMessage(id: string, nickname: string, message: ClientMessage): void {
   switch (message.type) {
     case "broadcast-start":
-      room.startBroadcast(id, { video: message.video, audio: message.audio })
+      room.startBroadcast(id, nickname, { video: message.video, audio: message.audio })
       return
     case "broadcast-stop":
-      room.stopBroadcast(id)
+      room.stopBroadcast(id, nickname)
+      return
+    case "watching":
+      room.setWatching(nickname, message.nickname)
       return
     default:
       // Unreachable: parseClientMessage yields no other shape. Ignoring beats
@@ -80,7 +84,7 @@ export const signalingRoute = upgradeWebSocket(
 
     return {
       onOpen(_event, ws) {
-        clients.set(id, { id, ws, alive: true })
+        clients.set(id, { id, nickname, ws, alive: true })
         room.join(id, nickname)
 
         rawSocket(ws)?.on("pong", () => {
@@ -98,13 +102,13 @@ export const signalingRoute = upgradeWebSocket(
         const message = parseClientMessage(event.data)
         if (message === null) return
 
-        applyMessage(id, message)
+        applyMessage(id, nickname, message)
         publishRoomState()
       },
 
       onClose() {
         clients.delete(id)
-        room.leave(id)
+        room.leave(id, nickname)
         publishRoomState()
       },
     }
