@@ -5,6 +5,9 @@ import type { ClientMessage } from "@shared/protocol"
 import { getPartyTracks, getScreenshareSource, toTrackRef, videoSendEncodings } from "./tracks"
 import type { Signaling } from "./useSignaling"
 
+/** `useObservable` demands an observer; here the subscription itself is the point. */
+function ignore(): void {}
+
 export type Broadcasting = {
   isBroadcasting: boolean
   /** Last error while acquiring the screen, e.g. the picker being dismissed. */
@@ -27,6 +30,13 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
 
   const isBroadcasting = useObservableAsValue(screenshare.isBroadcasting$, false)
   const [error, setError] = useState<string | null>(null)
+
+  // `isBroadcasting$` is only ever fed from inside the `broadcastTrack$`
+  // pipeline, and that pipeline is ref-counted: with nobody subscribed,
+  // toggling flips a flag nothing reads, the screen picker never opens and the
+  // effect below never runs. This keeps it warm — while idle it emits a local
+  // black canvas and touches neither the capture APIs nor the network.
+  useObservable(screenshare.video.broadcastTrack$, ignore)
 
   /** What the room was last told, so a reconnect can repeat it. */
   const announcement = useRef<ClientMessage | null>(null)
