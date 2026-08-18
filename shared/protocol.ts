@@ -92,6 +92,31 @@ export function parseClientMessage(raw: string): ClientMessage | null {
   }
 }
 
+/**
+ * The client trusts its own server, but not a stale one: after a deploy an old
+ * tab can still be holding a socket that speaks a different shape. Returns
+ * `null` rather than letting a malformed snapshot reach the UI.
+ */
+export function parseServerMessage(raw: string): ServerMessage | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+
+  if (!isRecord(parsed)) return null
+  if (parsed.type !== "state") return null
+  if (typeof parsed.you !== "string") return null
+  if (!Array.isArray(parsed.participants)) return null
+
+  return {
+    type: "state",
+    you: parsed.you,
+    participants: parsed.participants as Participant[],
+  }
+}
+
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/g
 
 /**

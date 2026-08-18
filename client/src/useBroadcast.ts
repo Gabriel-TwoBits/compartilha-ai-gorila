@@ -1,0 +1,81 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useObservable, useObservableAsValue } from "partytracks/react"
+import { catchError, combineLatest, of, startWith } from "rxjs"
+import type { ClientMessage } from "@shared/protocol"
+import { getPartyTracks, getScreenshareSource, toTrackRef } from "./tracks"
+import type { Signaling } from "./useSignaling"
+
+export type Broadcasting = {
+  isBroadcasting: boolean
+  /** Last error while acquiring the screen, e.g. the picker being dismissed. */
+  error: string | null
+  toggle: () => void
+}
+
+/**
+ * Publishes our screen to the SFU and announces its track addresses to the room.
+ *
+ * The push subscription is tied to `isBroadcasting` rather than being permanent:
+ * partytracks swaps in an empty placeholder track when not broadcasting, and
+ * paying to relay that through Cloudflare for every idle participant would be
+ * pure waste.
+ */
+export function useBroadcast(signaling: Signaling): Broadcasting {
+  const partyTracks = getPartyTracks()
+  const screenshare = getScreenshareSource()
+  const { send, connected } = signaling
+
+  const isBroadcasting = useObservableAsValue(screenshare.isBroadcasting$, false)
+  const [error, setError] = useState<string | null>(null)
+
+  /** What the room was last told, so a reconnect can repeat it. */
+  const announcement = useRef<ClientMessage | null>(null)
+
+  useObservable(screenshare.video.error$, (screenError) => {
+    setError(screenError.message)
+  })
+
+  useEffect(() => {
+    if (!isBroadcasting) return undefined
+
+    setError(null)
+
+    const video$ = partyTracks.push(screenshare.video.broadcastTrack$)
+    // Audio is optional: the picker only yields a track when "share audio" is
+    // ticked, and on some platforms never. `startWith` lets the broadcast be
+    // announced on video alone, then announced again once audio shows up.
+    const audio$ = partyTracks.push(screenshare.audio.broadcastTrack$).pipe(
+      startWith(null),
+      catchError(() => of(null)),
+    )
+
+    const subscription = combineLatest([video$, audio$]).subscribe(([videoMeta, audioMeta]) => {
+      const video = toTrackRef(videoMeta)
+      if (video === null) return
+      const message: ClientMessage = { type: "broadcast-start", video, audio: toTrackRef(audioMeta) }
+      announcement.current = message
+      send(message)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+      announcement.current = null
+      send({ type: "broadcast-stop" })
+    }
+  }, [isBroadcasting, partyTracks, screenshare, send])
+
+  // A dropped socket costs us our participant entry on the server, so whatever
+  // we were broadcasting has to be announced again on the new one.
+  useEffect(() => {
+    if (!connected) return
+    const message = announcement.current
+    if (message === null) return
+    send(message)
+  }, [connected, send])
+
+  const toggle = useCallback(() => {
+    screenshare.toggleBroadcasting()
+  }, [screenshare])
+
+  return useMemo(() => ({ isBroadcasting, error, toggle }), [isBroadcasting, error, toggle])
+}
