@@ -128,12 +128,8 @@ HTTPS. Um *quick tunnel* resolve isso num comando: uma URL HTTPS pública
 apontando para o servidor local, sem conta na Cloudflare, sem domínio e sem
 abrir porta no roteador.
 
-**1. Instale o `cloudflared`.**
-
-```sh
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
-sudo dpkg -i /tmp/cloudflared.deb
-```
+**1. Instale o
+[`cloudflared`](https://github.com/cloudflare/cloudflared/releases/latest).**
 
 **2. Suba em modo produção.** Uma porta só, e o cookie de sessão sai `Secure`,
 como o HTTPS do túnel pede.
@@ -161,15 +157,8 @@ que `vite.config.ts` aceita hosts `.trycloudflare.com`. Nesse caminho o cookie
 sai sem `Secure` e o HMR pode reclamar pelo túnel; para testar com gente de
 verdade, prefira o modo produção acima.
 
-### Custo
-
-Nenhum. O quick tunnel é gratuito e nem pede conta, e SFU e TURN dividem a cota
-de 1.000 GB/mês descrita em "Uso de banda". O preço é não ter garantia de uptime
-e um teto de 200 requisições simultâneas — é ferramenta de teste, não de
-produção. URL fixa exige um domínio na Cloudflare e um *named tunnel*
-(`cloudflared tunnel login`, `create`, `route dns`, `run`); aí o host deixa de
-ser `.trycloudflare.com` e o `allowedHosts` do Vite não o cobre, mais um motivo
-para servir pelo Node.
+O túnel não custa nada e não pede conta, mas não tem garantia de uptime e corta
+em 200 requisições simultâneas: serve para testar, não para hospedar.
 
 ### Se o vídeo não chegar
 
@@ -205,7 +194,6 @@ ambiente só no boot. O túnel segue de pé e a URL não muda.
 | `client/src/useBroadcast.ts` | Publica a tela no SFU e anuncia para a sala |
 | `client/src/tracks.ts` | Singletons do PartyTracks e os tetos de 720p30 / 2,5 Mbps |
 | `client/src/components/Stage.tsx` | Painel principal: prévia local ou track remota |
-| `Dockerfile` | Build multi-stage: cliente no primeiro estágio, runtime no segundo |
 
 ```sh
 pnpm test        # vitest
@@ -213,19 +201,6 @@ pnpm typecheck   # tsc --noEmit
 ```
 
 ---
-
-## Publicando no Codeberg
-
-Crie o repositório vazio no Codeberg e depois:
-
-```sh
-git remote add origin https://codeberg.org/<seu-usuário>/compartilha-ai-gorila.git
-git push -u origin main
-```
-
-O `.env` fica de fora pelo `.gitignore`, e nenhum segredo jamais entrou no
-histórico — só o `.env.example`, com os campos em branco. Quem clonar precisa
-das próprias credenciais da Cloudflare e da própria `ROOM_PASSWORD`.
 
 ## Licença
 
