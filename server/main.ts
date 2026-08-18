@@ -95,6 +95,30 @@ async function logUpstreamFailure(path: string, response: Response): Promise<voi
 }
 
 /**
+ * Drops the encoding headers from a proxied SFU response.
+ *
+ * `fetch` decompresses an upstream body transparently but leaves
+ * `Content-Encoding` on the response, so relaying it verbatim hands the browser
+ * plain JSON still labelled as gzip. The browser fails to decode it, partytracks
+ * retries the offer against a session that already has one, and the SFU answers
+ * "Session is not ready yet" — a broadcast that captures the screen and
+ * publishes nothing. `Content-Length` goes too: it counted compressed bytes.
+ */
+function withDecodedBodyHeaders(response: Response): Response {
+  if (!response.headers.has("Content-Encoding")) return response
+
+  const headers = new Headers(response.headers)
+  headers.delete("Content-Encoding")
+  headers.delete("Content-Length")
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
+/**
  * Proxy to the Cloudflare Realtime SFU. This exists so `SFU_APP_TOKEN` stays on
  * the server, and it sits behind the session for the same reason.
  */
@@ -106,7 +130,7 @@ app.all("/partytracks/*", requireSession, async (c) => {
   })
 
   if (!response.ok) await logUpstreamFailure(c.req.path, response)
-  return response
+  return withDecodedBodyHeaders(response)
 })
 
 app.get("/ws", requireSession, signalingRoute)
