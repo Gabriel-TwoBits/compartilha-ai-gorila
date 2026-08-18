@@ -123,9 +123,18 @@ function withDecodedBodyHeaders(response: Response): Response {
  * the server, and it sits behind the session for the same reason.
  */
 app.all("/partytracks/*", requireSession, async (c) => {
+  // Spread rather than passed as `undefined`: `exactOptionalPropertyTypes`
+  // treats an explicit `undefined` as a different thing from an absent key, and
+  // the helper falls back to STUN only on the absent one.
+  const turn =
+    env.turn === null
+      ? {}
+      : { turnServerAppId: env.turn.appId, turnServerAppToken: env.turn.appToken }
+
   const response = await routePartyTracksRequest({
     appId: env.sfuAppId,
     token: env.sfuAppToken,
+    ...turn,
     request: await withBufferedBody(c.req.raw),
   })
 

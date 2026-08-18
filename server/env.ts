@@ -37,6 +37,33 @@ function readRequired(): Record<RequiredKey, string> {
   return values as Record<RequiredKey, string>
 }
 
+/**
+ * Cloudflare TURN credentials, or `null` when TURN is not set up.
+ *
+ * Without them the browser is handed STUN only, which is enough whenever a
+ * direct path to the SFU exists and useless when it does not — a symmetric NAT
+ * or a network that drops outbound UDP leaves the peer connection stuck in
+ * `failed`. They are a separate Realtime product from the SFU app, hence a
+ * second pair of credentials.
+ */
+function readTurn(): { appId: string; appToken: string } | null {
+  const appId = process.env.TURN_APP_ID?.trim()
+  const appToken = process.env.TURN_APP_TOKEN?.trim()
+
+  if (appId === undefined || appId.length === 0) {
+    if (appToken !== undefined && appToken.length > 0) {
+      throw new Error("TURN_APP_TOKEN is set without TURN_APP_ID; set both or neither.")
+    }
+    return null
+  }
+
+  if (appToken === undefined || appToken.length === 0) {
+    throw new Error("TURN_APP_ID is set without TURN_APP_TOKEN; set both or neither.")
+  }
+
+  return { appId, appToken }
+}
+
 function readPort(): number {
   const raw = process.env.PORT?.trim()
   if (raw === undefined || raw.length === 0) return DEFAULT_PORT
@@ -71,6 +98,7 @@ export const env = Object.freeze({
   port: readPort(),
   sfuAppId: required.SFU_APP_ID,
   sfuAppToken: required.SFU_APP_TOKEN,
+  turn: readTurn(),
   roomPassword: required.ROOM_PASSWORD,
   sessionSecret: required.SESSION_SECRET,
   isProduction,
