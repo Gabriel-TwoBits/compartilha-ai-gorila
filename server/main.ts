@@ -44,14 +44,43 @@ app.post("/api/logout", (c) => {
 app.get("/api/me", requireSession, (c) => c.json({ nickname: c.get("nickname") }))
 
 /**
+ * Replaces the streaming request body with the bytes it carries.
+ *
+ * `routePartyTracksRequest` hands `request.body` straight to `fetch`. On Node
+ * that body is a `ReadableStream`, and undici rejects a streaming body unless
+ * `duplex: "half"` is set — a flag the helper never sets, because it is written
+ * against Cloudflare Workers, where streaming a body needs none. Every proxied
+ * call that carries a payload would otherwise fail with a `TypeError` before
+ * reaching the SFU: `/sessions/new` has no body and succeeds, `/tracks/new`
+ * does and does not, which reads as a broadcast that publishes nothing.
+ *
+ * Only the properties the helper reads are supplied. `headers` is the real one,
+ * so the session cookie lookup it performs in production still sees it.
+ */
+async function withBufferedBody(request: Request): Promise<Request> {
+  if (request.body === null) return request
+
+  const body = new Uint8Array(await request.arrayBuffer())
+
+  // The helper forwards the body only when it can see a length, and a buffered
+  // body is no longer chunked.
+  const headers = new Headers(request.headers)
+  headers.set("Content-Length", String(body.byteLength))
+  headers.delete("Transfer-Encoding")
+
+  const buffered = { url: request.url, method: request.method, headers, body }
+  return buffered as unknown as Request
+}
+
+/**
  * Proxy to the Cloudflare Realtime SFU. This exists so `SFU_APP_TOKEN` stays on
  * the server, and it sits behind the session for the same reason.
  */
-app.all("/partytracks/*", requireSession, (c) =>
+app.all("/partytracks/*", requireSession, async (c) =>
   routePartyTracksRequest({
     appId: env.sfuAppId,
     token: env.sfuAppToken,
-    request: c.req.raw,
+    request: await withBufferedBody(c.req.raw),
   }),
 )
 
