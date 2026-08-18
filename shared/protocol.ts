@@ -52,8 +52,8 @@ export type ServerMessage = {
 export type ClientMessage =
   | { type: "broadcast-start"; video: TrackRef; audio: TrackRef | null }
   | { type: "broadcast-stop" }
-  /** Whose broadcast we are showing, or `null` when showing none. */
-  | { type: "watching"; nickname: string | null }
+  /** Whose broadcasts we currently have open, empty when showing none. */
+  | { type: "watching"; nicknames: string[] }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -98,12 +98,18 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     case "broadcast-stop":
       return { type: "broadcast-stop" }
     case "watching": {
-      const { nickname } = parsed
-      if (nickname === null || nickname === undefined) {
-        return { type: "watching", nickname: null }
+      const { nicknames } = parsed
+      // Watching nobody is the common case, so an absent list is not an error.
+      if (nicknames === null || nicknames === undefined) {
+        return { type: "watching", nicknames: [] }
       }
-      if (typeof nickname !== "string" || nickname.length === 0) return null
-      return { type: "watching", nickname }
+      if (!Array.isArray(nicknames)) return null
+      // One bad entry drops the whole report: a partially applied list would
+      // leave the viewer counts claiming something nobody asked for.
+      for (const nickname of nicknames) {
+        if (typeof nickname !== "string" || nickname.length === 0) return null
+      }
+      return { type: "watching", nicknames: nicknames as string[] }
     }
     default:
       return null

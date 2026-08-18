@@ -22,37 +22,44 @@ export function RoomScreen({ nickname, onLogout }: Props) {
   const signaling = useSignaling()
   const broadcast = useBroadcast(signaling)
 
-  /** Only records an explicit pick; the fallback is derived below. */
-  const [pickedNickname, setPickedNickname] = useState<string | null>(null)
-
-  /** Whose broadcast the viewer asked to open. Nothing is pulled until they do. */
-  const [watchedNickname, setWatchedNickname] = useState<string | null>(null)
+  /** Whose broadcasts the viewer asked to open. Nothing is pulled until they do. */
+  const [openedNicknames, setOpenedNicknames] = useState<string[]>([])
 
   const participants: Participant[] = signaling.room?.participants ?? []
   const you = signaling.room?.you ?? null
   const broadcasters = participants.filter((participant) => participant.broadcast !== null)
 
-  // Deriving rather than syncing with an effect: whoever was picked may have
-  // stopped, in which case the first live broadcast takes over on its own.
-  const selected =
-    broadcasters.find((participant) => participant.nickname === pickedNickname) ??
-    broadcasters[0] ??
-    null
+  // Derived rather than synced with an effect: whoever was opened may since have
+  // stopped, which drops them from the count without any bookkeeping. Our own
+  // screen never counts — it comes from the local capture, not from the SFU.
+  const watching = broadcasters
+    .filter(
+      (participant) =>
+        participant.nickname !== you && openedNicknames.includes(participant.nickname),
+    )
+    .map((participant) => participant.nickname)
 
-  const selectedNickname = selected?.nickname ?? null
-
-  // Only the broadcast on screen is being pulled. Deriving it from `selected`
-  // covers both ways the stage falls back to the gate on its own: the viewer
-  // picking someone else, and the broadcaster stopping.
-  const isWatching = selectedNickname !== null && selectedNickname === watchedNickname
-
-  // Feeds the viewer counts everyone else sees, and reports only a broadcast
-  // actually being pulled.
-  const watchingNickname = isWatching ? selectedNickname : null
+  // Feeds the viewer counts everyone else sees, and reports only what is
+  // actually being pulled. Nicknames are stripped of control characters, so a
+  // newline cannot appear inside one and joins them into a stable effect key —
+  // the array itself is rebuilt on every render.
+  const watchingKey = watching.join("\n")
   const { send } = signaling
   useEffect(() => {
-    send({ type: "watching", nickname: watchingNickname })
-  }, [send, watchingNickname, signaling.connected])
+    const nicknames = watchingKey === "" ? [] : watchingKey.split("\n")
+    send({ type: "watching", nicknames })
+  }, [send, watchingKey, signaling.connected])
+
+  function openBroadcast(nickname: string): void {
+    setOpenedNicknames((current) => {
+      if (current.includes(nickname)) return current
+      return [...current, nickname]
+    })
+  }
+
+  function closeBroadcast(nickname: string): void {
+    setOpenedNicknames((current) => current.filter((opened) => opened !== nickname))
+  }
 
   async function handleLogout(): Promise<void> {
     await logout()
@@ -80,17 +87,13 @@ export function RoomScreen({ nickname, onLogout }: Props) {
 
       <div className="flex min-h-0 flex-1">
         <Stage
-          selected={selected}
+          broadcasters={broadcasters}
           you={you}
-          isWatching={isWatching}
-          onWatch={() => setWatchedNickname(selectedNickname)}
+          opened={openedNicknames}
+          onOpen={openBroadcast}
+          onClose={closeBroadcast}
         />
-        <Participants
-          participants={participants}
-          you={you}
-          selectedNickname={selectedNickname}
-          onSelect={setPickedNickname}
-        />
+        <Participants participants={participants} you={you} />
       </div>
 
       <footer className="flex items-center justify-between gap-4 px-4 py-3">

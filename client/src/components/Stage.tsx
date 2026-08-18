@@ -1,4 +1,12 @@
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  type ChangeEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { type TrackMetadata, createAudioSink } from "partytracks/client"
 import { useObservable } from "partytracks/react"
 import { type Observable, of } from "rxjs"
@@ -9,6 +17,19 @@ const DEFAULT_VOLUME = 1
 const VOLUME_STEP = 0.05
 
 const videoClassName = "size-full object-contain"
+
+const frameClassName = "overflow-hidden rounded-2xl border border-dashed border-edge"
+
+/**
+ * One tile per broadcast, reflowing as people start and stop. Rows never fall
+ * below a readable height, so a busy room scrolls rather than shrinking every
+ * screen into a thumbnail.
+ */
+const gridClassName = [
+  "m-4 grid min-h-0 flex-1 gap-4 overflow-y-auto",
+  "[grid-template-columns:repeat(auto-fit,minmax(20rem,1fr))]",
+  "auto-rows-[minmax(12rem,1fr)]",
+].join(" ")
 
 function remoteTrack$(sessionId: string, trackName: string): Observable<TrackMetadata> {
   return of({ location: "remote", sessionId, trackName })
@@ -143,13 +164,10 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
  */
 function WatchGate({ nickname, onWatch }: { nickname: string; onWatch: () => void }) {
   return (
-    <div className="flex size-full flex-col items-center justify-center gap-4 px-8 text-center">
-      <span className="flex size-20 items-center justify-center rounded-2xl bg-surface-raised text-4xl">
-        📡
-      </span>
-      <h2 className="text-lg font-semibold">{nickname} está transmitindo</h2>
-      <p className="max-w-md text-sm leading-relaxed text-ink-muted">
-        A transmissão só começa a ser baixada quando você abrir.
+    <div className="flex size-full flex-col items-center justify-center gap-3 px-6 text-center">
+      <span className="text-4xl">📡</span>
+      <p className="text-sm text-ink-muted">
+        <strong className="text-ink">{nickname}</strong> está transmitindo
       </p>
       <button
         type="button"
@@ -162,6 +180,38 @@ function WatchGate({ nickname, onWatch }: { nickname: string; onWatch: () => voi
   )
 }
 
+function Tile({
+  label,
+  action,
+  children,
+}: {
+  label: string
+  action: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className={`flex min-h-0 flex-col ${frameClassName}`}>
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-3 py-2">
+        <span className="truncate text-sm font-medium">{label}</span>
+        {action}
+      </div>
+      <div className="min-h-0 flex-1">{children}</div>
+    </div>
+  )
+}
+
+function StopWatchingButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClose}
+      className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted transition hover:bg-surface-raised hover:text-ink"
+    >
+      ✕ Parar de assistir
+    </button>
+  )
+}
+
 function EmptyStage() {
   return (
     <div className="flex size-full flex-col items-center justify-center gap-4 px-8 text-center">
@@ -171,56 +221,73 @@ function EmptyStage() {
       <h2 className="text-lg font-semibold">Ninguém transmitindo agora</h2>
       <p className="max-w-md text-sm leading-relaxed text-ink-muted">
         Clique em <strong className="text-ink">Transmitir minha tela</strong> e escolha o que
-        compartilhar. Pra jogo em tela cheia, compartilhe <strong className="text-ink">a tela
-        inteira</strong> e marque <strong className="text-ink">"compartilhar áudio"</strong>.
+        compartilhar. Pra jogo em tela cheia, compartilhe{" "}
+        <strong className="text-ink">a tela inteira</strong> e marque{" "}
+        <strong className="text-ink">"compartilhar áudio"</strong>.
       </p>
     </div>
   )
 }
 
 type Props = {
-  selected: Participant | null
+  /** Everyone currently broadcasting, our own broadcast included. */
+  broadcasters: Participant[]
   you: string | null
-  /** Whether the viewer has opened `selected`'s broadcast. */
-  isWatching: boolean
-  onWatch: () => void
+  /** Whose broadcasts the viewer has opened. */
+  opened: string[]
+  onOpen: (nickname: string) => void
+  onClose: (nickname: string) => void
 }
 
-export function Stage({ selected, you, isWatching, onWatch }: Props) {
-  const border = "m-4 flex-1 overflow-hidden rounded-2xl border border-dashed border-edge"
-
-  if (selected === null || selected.broadcast === null) {
+export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
+  if (broadcasters.length === 0) {
     return (
-      <section className={border}>
+      <section className={`m-4 flex-1 ${frameClassName}`}>
         <EmptyStage />
       </section>
     )
   }
 
-  // Our own screen comes from the local capture, so there is nothing to opt into.
-  if (selected.nickname === you) {
-    return (
-      <section className={border}>
-        <LocalPreview />
-      </section>
-    )
-  }
-
-  if (!isWatching) {
-    return (
-      <section className={border}>
-        <WatchGate nickname={selected.nickname} onWatch={onWatch} />
-      </section>
-    )
-  }
-
   return (
-    <section className={border}>
-      {/* Keyed on the address so a republished track remounts with fresh pulls. */}
-      <RemoteBroadcast
-        key={`${selected.broadcast.video.sessionId}/${selected.broadcast.video.trackName}`}
-        broadcast={selected.broadcast}
-      />
+    <section className={gridClassName}>
+      {broadcasters.map((participant) => {
+        const { nickname, broadcast } = participant
+
+        // The caller filters these out; the type still admits one.
+        if (broadcast === null) return null
+
+        // Our own screen comes from the local capture, so there is nothing to
+        // open and nothing to stop paying for.
+        if (nickname === you) {
+          return (
+            <Tile key={nickname} label="Sua tela" action={null}>
+              <LocalPreview />
+            </Tile>
+          )
+        }
+
+        if (!opened.includes(nickname)) {
+          return (
+            <Tile key={nickname} label={nickname} action={null}>
+              <WatchGate nickname={nickname} onWatch={() => onOpen(nickname)} />
+            </Tile>
+          )
+        }
+
+        return (
+          <Tile
+            key={nickname}
+            label={nickname}
+            action={<StopWatchingButton onClose={() => onClose(nickname)} />}
+          >
+            {/* Keyed on the address so a republished track remounts with fresh pulls. */}
+            <RemoteBroadcast
+              key={`${broadcast.video.sessionId}/${broadcast.video.trackName}`}
+              broadcast={broadcast}
+            />
+          </Tile>
+        )
+      })}
     </section>
   )
 }

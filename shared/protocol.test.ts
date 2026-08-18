@@ -60,23 +60,31 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage(raw)).toBeNull()
   })
 
-  it("accepts a watch report naming a broadcaster", () => {
-    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: "carlinhos" }))).toEqual({
+  it("accepts a watch report naming several broadcasters", () => {
+    const raw = JSON.stringify({ type: "watching", nicknames: ["carlinhos", "mariazinha"] })
+    expect(parseClientMessage(raw)).toEqual({
       type: "watching",
-      nickname: "carlinhos",
+      nicknames: ["carlinhos", "mariazinha"],
     })
   })
 
   it("accepts a watch report naming nobody", () => {
-    const expected = { type: "watching", nickname: null }
-    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: null }))).toEqual(expected)
+    const expected = { type: "watching", nicknames: [] }
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: [] }))).toEqual(expected)
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: null }))).toEqual(expected)
     expect(parseClientMessage(JSON.stringify({ type: "watching" }))).toEqual(expected)
   })
 
-  it("drops a watch report whose nickname is neither a name nor absent", () => {
-    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: "" }))).toBeNull()
-    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: 7 }))).toBeNull()
-    expect(parseClientMessage(JSON.stringify({ type: "watching", nickname: {} }))).toBeNull()
+  it("drops a watch report whose list holds anything but names", () => {
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: [""] }))).toBeNull()
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: [7] }))).toBeNull()
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: [null] }))).toBeNull()
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: ["ok", 7] }))).toBeNull()
+  })
+
+  it("drops a watch report whose list is not a list", () => {
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: "carlinhos" }))).toBeNull()
+    expect(parseClientMessage(JSON.stringify({ type: "watching", nicknames: {} }))).toBeNull()
   })
 })
 

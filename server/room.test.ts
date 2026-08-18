@@ -157,7 +157,7 @@ describe("viewers", () => {
     join("conn-2", "mariazinha")
     startBroadcast("conn-1", "carlinhos", broadcast)
 
-    setWatching("mariazinha", "carlinhos")
+    setWatching("mariazinha", ["carlinhos"])
 
     expect(snapshot()[0]?.viewers).toEqual(["mariazinha"])
     expect(snapshot()[1]?.viewers).toEqual([])
@@ -167,7 +167,7 @@ describe("viewers", () => {
     join("conn-1", "carlinhos")
     startBroadcast("conn-1", "carlinhos", broadcast)
 
-    setWatching("carlinhos", "carlinhos")
+    setWatching("carlinhos", ["carlinhos"])
 
     expect(snapshot()[0]?.viewers).toEqual([])
   })
@@ -176,9 +176,9 @@ describe("viewers", () => {
     join("conn-1", "carlinhos")
     join("conn-2", "mariazinha")
     startBroadcast("conn-1", "carlinhos", broadcast)
-    setWatching("mariazinha", "carlinhos")
+    setWatching("mariazinha", ["carlinhos"])
 
-    setWatching("mariazinha", null)
+    setWatching("mariazinha", [])
 
     expect(snapshot()[0]?.viewers).toEqual([])
   })
@@ -187,15 +187,40 @@ describe("viewers", () => {
     join("conn-1", "carlinhos")
     join("conn-2", "mariazinha")
     startBroadcast("conn-1", "carlinhos", broadcast)
-    setWatching("mariazinha", "carlinhos")
+    setWatching("mariazinha", ["carlinhos"])
 
     leave("conn-2", "mariazinha")
 
     expect(snapshot()[0]?.viewers).toEqual([])
   })
 
+  it("attributes a watcher to every broadcast they have open", () => {
+    join("conn-1", "carlinhos")
+    join("conn-2", "mariazinha")
+    join("conn-3", "zezinho")
+    startBroadcast("conn-1", "carlinhos", broadcast)
+    startBroadcast("conn-2", "mariazinha", broadcast)
+
+    setWatching("zezinho", ["carlinhos", "mariazinha"])
+
+    expect(snapshot()[0]?.viewers).toEqual(["zezinho"])
+    expect(snapshot()[1]?.viewers).toEqual(["zezinho"])
+  })
+
+  it("counts a broadcaster watching someone else without counting themselves", () => {
+    join("conn-1", "carlinhos")
+    join("conn-2", "mariazinha")
+    startBroadcast("conn-1", "carlinhos", broadcast)
+    startBroadcast("conn-2", "mariazinha", broadcast)
+
+    setWatching("mariazinha", ["carlinhos", "mariazinha"])
+
+    expect(snapshot()[0]?.viewers).toEqual(["mariazinha"])
+    expect(snapshot()[1]?.viewers).toEqual([])
+  })
+
   it("ignores a watch report from a participant that already left", () => {
-    setWatching("ghost", "carlinhos")
+    setWatching("ghost", ["carlinhos"])
 
     expect(snapshot()).toEqual([])
   })

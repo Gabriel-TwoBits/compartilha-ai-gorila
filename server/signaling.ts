@@ -60,7 +60,7 @@ function applyMessage(id: string, nickname: string, message: ClientMessage): voi
       room.stopBroadcast(id, nickname)
       return
     case "watching":
-      room.setWatching(nickname, message.nickname)
+      room.setWatching(nickname, message.nicknames)
       return
     default:
       // Unreachable: parseClientMessage yields no other shape. Ignoring beats

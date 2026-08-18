@@ -18,8 +18,8 @@ type Entry = {
   broadcast: Broadcast | null
   /** Which connection published the broadcast, so only it can retract it. */
   broadcastOwner: string | null
-  /** Whose broadcast this participant is watching. */
-  watching: string | null
+  /** Whose broadcasts this participant currently has open. */
+  watching: Set<string>
 }
 
 const participants = new Map<string, Entry>()
@@ -33,7 +33,7 @@ function entryFor(nickname: string): Entry {
     connections: new Set(),
     broadcast: null,
     broadcastOwner: null,
-    watching: null,
+    watching: new Set(),
   }
   participants.set(nickname, created)
   return created
@@ -84,11 +84,11 @@ export function stopBroadcast(connectionId: string, nickname: string): void {
   entry.broadcastOwner = null
 }
 
-/** Records whose broadcast a participant is showing, for the viewer counts. */
-export function setWatching(nickname: string, watching: string | null): void {
+/** Records whose broadcasts a participant is showing, for the viewer counts. */
+export function setWatching(nickname: string, watching: string[]): void {
   const entry = participants.get(nickname)
   if (entry === undefined) return
-  entry.watching = watching
+  entry.watching = new Set(watching)
 }
 
 function copyBroadcast(broadcast: Broadcast | null): Broadcast | null {
@@ -107,15 +107,16 @@ function viewersByBroadcaster(): Map<string, string[]> {
   const viewers = new Map<string, string[]>()
 
   for (const entry of participants.values()) {
-    if (entry.watching === null) continue
-    if (entry.watching === entry.nickname) continue
+    for (const broadcaster of entry.watching) {
+      if (broadcaster === entry.nickname) continue
 
-    const existing = viewers.get(entry.watching)
-    if (existing === undefined) {
-      viewers.set(entry.watching, [entry.nickname])
-      continue
+      const existing = viewers.get(broadcaster)
+      if (existing === undefined) {
+        viewers.set(broadcaster, [entry.nickname])
+        continue
+      }
+      existing.push(entry.nickname)
     }
-    existing.push(entry.nickname)
   }
 
   return viewers
