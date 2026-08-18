@@ -21,6 +21,11 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    // Vite refuses requests carrying a Host it does not know. Quick tunnels get
+    // a random name under this domain, and reaching the dev server through one
+    // is the only way to exercise the app over https, from another device, or
+    // from another network — none of which localhost can stand in for.
+    allowedHosts: [".trycloudflare.com"],
     proxy: {
       "/api": backend,
       "/partytracks": backend,
