@@ -26,6 +26,9 @@ importers:
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
       webrtc-adapter:
         specifier: ^9.0.6
         version: 9.0.6
@@ -57,9 +60,6 @@ importers:
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
-      tsx:
-        specifier: ^4.23.12
-        version: 4.23.12
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
