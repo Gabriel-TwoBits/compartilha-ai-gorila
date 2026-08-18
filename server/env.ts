@@ -7,6 +7,8 @@
  */
 
 const DEFAULT_PORT = 8787
+const MIN_PORT = 1
+const MAX_PORT = 65535
 
 const REQUIRED_KEYS = ["SFU_APP_ID", "SFU_APP_TOKEN", "ROOM_PASSWORD", "SESSION_SECRET"] as const
 
@@ -40,8 +42,8 @@ function readPort(): number {
   if (raw === undefined || raw.length === 0) return DEFAULT_PORT
 
   const port = Number(raw)
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(`PORT must be an integer between 1 and 65535, got "${raw}".`)
+  if (!Number.isInteger(port) || port < MIN_PORT || port > MAX_PORT) {
+    throw new Error(`PORT must be an integer between ${MIN_PORT} and ${MAX_PORT}, got "${raw}".`)
   }
   return port
 }

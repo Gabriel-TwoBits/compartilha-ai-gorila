@@ -117,8 +117,8 @@ export const signalingRoute = upgradeWebSocket(
 )
 
 /** Starts the liveness probe. Called once, after the server is listening. */
-export function startHeartbeat(): NodeJS.Timeout {
-  return setInterval(() => {
+export function startHeartbeat(): void {
+  setInterval(() => {
     for (const client of clients.values()) {
       if (!client.alive) {
         // onClose does the room cleanup.
