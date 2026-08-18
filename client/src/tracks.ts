@@ -1,6 +1,11 @@
-import { PartyTracks, type Screenshare, getScreenshare } from "partytracks/client"
+import { PartyTracks, type Screenshare, getScreenshare, setLogLevel } from "partytracks/client"
 import type { TrackMetadata } from "partytracks/client"
 import type { TrackRef } from "@shared/protocol"
+
+// partytracks logs at "warn" by default, which hides every peer connection and
+// ICE transition. Those are the only trace a session that fails to connect
+// leaves behind, and the SFU rejects track requests until it does connect.
+if (import.meta.env.DEV) setLogLevel("debug")
 
 /**
  * Lazily created singletons.
