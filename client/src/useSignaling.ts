@@ -56,6 +56,12 @@ export function useSignaling(): Signaling {
       })
 
       socket.addEventListener("close", () => {
+        // The development double-mount closes the first socket while it is
+        // still connecting, and that close can land after its replacement is
+        // already open. Reporting it would leave the UI stuck on "reconnecting"
+        // over a live connection.
+        if (socketRef.current !== socket) return
+
         setConnected(false)
         setRoom(null)
         if (disposed) return
