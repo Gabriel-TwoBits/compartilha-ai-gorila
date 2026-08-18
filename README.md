@@ -1,98 +1,100 @@
 # CompartilhaAíGorila
 
-Uma sala única onde um grupo de amigos entra, alguém transmite a tela **com
-áudio** e os outros assistem. Sem câmera, sem microfone — a conversa por voz
-continua no Discord.
+A single room where a group of friends walks in, someone shares their screen
+**with audio** and everyone else watches. No camera, no microphone — the voice
+conversation stays on Discord.
 
-O encaminhamento de vídeo é feito pelo [Cloudflare Realtime
-SFU](https://developers.cloudflare.com/realtime/sfu/), que dá 1.000 GB/mês de
-egresso grátis. O servidor deste repositório cuida de login, presença e de
-distribuir os endereços das tracks; ele não toca na mídia.
+Video forwarding is handled by the [Cloudflare Realtime
+SFU](https://developers.cloudflare.com/realtime/sfu/), which comes with 1,000
+GB/month of free egress. The server in this repository takes care of login,
+presence and handing out track addresses; it never touches the media.
 
 ---
 
-## Como funciona
+## How it works
 
 ```
-Navegador A (transmite)                  Navegador B (assiste)
+Browser A (broadcasting)                 Browser B (watching)
    │  push(track)                            │  ◄── pull(track)
-   │  WS: "estou transmitindo,               │  WS: recebe o estado da sala
-   │       eis (sessionId, trackName)"       │      e puxa a track do A
+   │  WS: "I am broadcasting,                │  WS: receives the room state
+   │       here is (sessionId, trackName)"   │      and pulls A's track
    ▼                                         ▼
-┌────────────────────────────────────────────────────┐
-│  Servidor Node (server/)                           │
-│   /api/login|logout|me   cookie de sessão assinado │
-│   /ws                    presença + endereços      │
-│   /partytracks/*         proxy (guarda o segredo)  │
-└──────────────────────┬─────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  Node server (server/)                               │
+│   /api/login|logout|me   signed session cookie       │
+│   /ws                    presence + track addresses  │
+│   /partytracks/*         proxy (keeps the secret)    │
+└──────────────────────┬───────────────────────────────┘
                        │ Bearer SFU_APP_TOKEN
                        ▼
-             Cloudflare Realtime SFU  ◄── a mídia trafega por aqui
+             Cloudflare Realtime SFU  ◄── the media flows through here
 ```
 
-O SFU da Cloudflare não tem conceito de sala: quem assiste só consegue puxar uma
-track se souber o par `(sessionId, trackName)` de quem transmite. Distribuir esse
-par é a única razão de existir do WebSocket em `server/signaling.ts`.
+Cloudflare's SFU has no concept of a room: a viewer can only pull a track if it
+knows the `(sessionId, trackName)` pair of whoever is broadcasting. Handing that
+pair around is the only reason the WebSocket in `server/signaling.ts` exists.
 
-**A identidade é o apelido.** Quem abre duas abas continua sendo um participante
-só, com duas conexões; a pessoa sai da sala quando a última fecha. A transmissão
-pertence à conexão que a publicou, então fechar uma aba ociosa não derruba a aba
-que está de fato compartilhando a tela. O preço disso é que dois amigos que
-escolherem o mesmo apelido viram uma entrada só — aceitável numa sala cujo
-portão de verdade é a senha compartilhada.
+**The nickname is the identity.** Someone with two tabs open is still a single
+participant with two connections, and only leaves the room when the last one
+closes. A broadcast belongs to the connection that published it, so closing an
+idle tab does not kill the tab actually sharing the screen. The price is that two
+friends picking the same nickname collapse into one entry — acceptable in a room
+whose real gate is a shared password.
 
-Cada cliente informa pelo socket qual transmissão está exibindo, e é daí que sai
-a contagem de espectadores na barra lateral. Quem assiste a própria tela vê a
-captura local, não uma cópia vinda do SFU, e por isso não conta como audiência.
+Every client reports over the socket which broadcast it is displaying, and that
+is where the viewer count in the sidebar comes from. Whoever watches their own
+screen sees the local capture rather than a copy coming back from the SFU, and
+so does not count as audience.
 
-O `SFU_APP_TOKEN` nunca chega ao navegador — daí o proxy `/partytracks/*`, que
-fica atrás do cookie de sessão para que ninguém de fora consuma a sua cota.
+The `SFU_APP_TOKEN` never reaches the browser — hence the `/partytracks/*` proxy,
+which sits behind the session cookie so that no outsider burns through your
+quota.
 
-O trabalho pesado de WebRTC (SDP, renegociação, recuperação de queda de conexão)
-é da lib [`partytracks`](https://www.npmjs.com/package/partytracks), mantida pela
-Cloudflare.
+The heavy WebRTC lifting (SDP, renegotiation, recovering from a dropped
+connection) belongs to [`partytracks`](https://www.npmjs.com/package/partytracks),
+a library maintained by Cloudflare.
 
 ---
 
-## Rodando localmente
+## Running locally
 
-**1. Crie o app SFU.** No [dashboard da
-Cloudflare](https://dash.cloudflare.com/?to=/:account/realtime/sfu), crie um app
-Realtime SFU e guarde o **App ID** e o **App Secret**.
+**1. Create the SFU app.** In the [Cloudflare
+dashboard](https://dash.cloudflare.com/?to=/:account/realtime/sfu), create a
+Realtime SFU app and keep the **App ID** and the **App Secret**.
 
-**2. Configure o ambiente.**
+**2. Set up the environment.**
 
 ```sh
 cp .env.example .env
 ```
 
-Preencha `SFU_APP_ID` e `SFU_APP_TOKEN` com o que a Cloudflare deu, escolha uma
-`ROOM_PASSWORD` e gere a chave de assinatura:
+Fill in `SFU_APP_ID` and `SFU_APP_TOKEN` with what Cloudflare gave you, pick a
+`ROOM_PASSWORD` and generate the signing key:
 
 ```sh
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-O servidor recusa subir com qualquer variável faltando, dizendo qual é.
+The server refuses to boot with any variable missing, naming the culprit.
 
-**3. Suba.**
+**3. Start it.**
 
 ```sh
 pnpm install
 pnpm dev
 ```
 
-A UI fica em <http://localhost:5173> e o servidor em `:8787`. Em
-desenvolvimento o Vite repassa `/api`, `/ws` e `/partytracks` para ele.
+The UI lives at <http://localhost:5173> and the server at `:8787`. In
+development Vite forwards `/api`, `/ws` and `/partytracks` to it.
 
-**4. Teste com duas pessoas.** Abra duas janelas do Chrome — uma normal e uma
-anônima, senão as duas compartilham o mesmo cookie — e entre com apelidos
-diferentes.
+**4. Test with two people.** Open two Chrome windows — one normal and one
+incognito, otherwise both share the same cookie — and log in with different
+nicknames.
 
-Para produção: `pnpm build && pnpm start`, que serve `dist/client` pelo próprio
-Node numa porta só. Para exercitar isso em `http://localhost`, rode com
-`SECURE_COOKIES=false` — senão o navegador descarta o cookie `Secure` e o login
-parece aceitar a senha sem nunca entrar.
+For production: `pnpm build && pnpm start`, which serves `dist/client` from Node
+itself on a single port. To exercise that over `http://localhost`, run it with
+`SECURE_COOKIES=false` — otherwise the browser drops the `Secure` cookie and the
+login looks like it accepts the password without ever letting anyone in.
 
 ### Container
 
@@ -101,99 +103,101 @@ docker build -t compartilha-ai-gorila .
 docker run -p 8787:8787 --env-file .env compartilha-ai-gorila
 ```
 
-Imagem multi-stage: o primeiro estágio monta o bundle do cliente com o
-toolchain completo, o segundo fica só com as dependências de runtime (~227 MB).
-Não há `--env-file` no `CMD` — um container recebe configuração pelo ambiente, e
-`server/env.ts` recusa subir se faltar alguma variável.
+A multi-stage image: the first stage builds the client bundle with the full
+toolchain, the second keeps only the runtime dependencies (~227 MB). There is no
+`--env-file` in the `CMD` — a container takes its configuration from the
+environment, and `server/env.ts` refuses to boot with anything missing.
 
-## Uso de banda
+## Bandwidth
 
-A captura é limitada a **720p, 30fps**, e o encoder a **2,5 Mbps**
-(`client/src/tracks.ts`). O teto de resolução por si só não limita bitrate — uma
-tela agitada estoura o que o encoder quiser — então o `maxBitrate` é o número
-que de fato segura a conta.
+Capture is capped at **720p, 30fps** and the encoder at **2.5 Mbps**
+(`client/src/tracks.ts`). A resolution ceiling alone does not cap bitrate — a
+busy screen blows through whatever the encoder feels like — so `maxBitrate` is
+the number that actually keeps the bill down.
 
-A Cloudflare cobra só a saída dela para os clientes, e o que você **envia** é de
-graça. A 2,5 Mbps isso dá ~1,1 GB/h **por espectador**: contra a cota gratuita
-de 1.000 GB/mês, cerca de 900 horas-espectador, ou ~225 h/mês com 4 pessoas
-assistindo.
+Cloudflare only charges for traffic going out to clients; what you **send** is
+free. At 2.5 Mbps that works out to ~1.1 GB/h **per viewer**: against the free
+quota of 1,000 GB/month, roughly 900 viewer-hours, or ~225 h/month with four
+people watching.
 
 ---
 
-## Expondo para amigos (Cloudflare Tunnel)
+## Sharing it with friends (Cloudflare Tunnel)
 
-**`http://localhost` funciona; `http://192.168.x.x` não.** Capturar a tela exige
-um contexto seguro, então assim que o app sai da sua máquina ele precisa de
-HTTPS. Um *quick tunnel* resolve isso num comando: uma URL HTTPS pública
-apontando para o servidor local, sem conta na Cloudflare, sem domínio e sem
-abrir porta no roteador.
+**`http://localhost` works; `http://192.168.x.x` does not.** Capturing the screen
+requires a secure context, so the moment the app leaves your machine it needs
+HTTPS. A quick tunnel settles that in one command: a public HTTPS URL pointing at
+the local server, with no Cloudflare account, no domain and no port forwarding on
+the router.
 
-**1. Instale o
+**1. Install
 [`cloudflared`](https://github.com/cloudflare/cloudflared/releases/latest).**
 
-**2. Rode um comando só.**
+**2. Run a single command.**
 
 ```sh
 pnpm share
 ```
 
-Ele monta o cliente, sobe o servidor em modo produção — porta única, e o cookie
-de sessão sai `Secure`, como o HTTPS do túnel pede — e abre o túnel na frente,
-anunciando a URL assim que ela existe:
+It builds the client, starts the server in production mode — one port, and the
+session cookie comes out `Secure`, as the tunnel's HTTPS demands — and puts the
+tunnel in front, announcing the URL as soon as it exists:
 
 ```
-  Room reachable at https://<quatro-palavras>.trycloudflare.com
+  Room reachable at https://<four-words>.trycloudflare.com
 ```
 
-Mande a URL para os amigos junto com a `ROOM_PASSWORD`, e peça que abram no
-Chrome/Chromium (ver "Limitações conhecidas"). Qualquer um com a URL cai na tela
-de login, então o portão continua sendo a senha. `Ctrl+C` derruba servidor e
-túnel juntos, e o endereço morre com eles; a próxima execução sorteia outro.
+Hand the URL to your friends along with the `ROOM_PASSWORD`, and ask them to open
+it in Chrome/Chromium (see "Known limitations"). Anyone holding the URL lands on
+the login screen, so the password remains the gate. `Ctrl+C` takes down server
+and tunnel together and the address dies with them; the next run draws another
+one.
 
-Para exercitar o app em desenvolvimento, aponte o túnel para o Vite
-(`cloudflared tunnel --url http://localhost:5173`) em vez do Node — é por isso
-que `vite.config.ts` aceita hosts `.trycloudflare.com`. Nesse caminho o cookie
-sai sem `Secure` e o HMR pode reclamar pelo túnel; para testar com gente de
-verdade, prefira o modo produção acima.
+To exercise the app in development, point the tunnel at Vite (`cloudflared tunnel
+--url http://localhost:5173`) instead of Node — that is why `vite.config.ts`
+accepts `.trycloudflare.com` hosts. On that path the cookie comes out without
+`Secure` and HMR may complain through the tunnel; for testing with real people,
+prefer the production route above.
 
-O túnel não custa nada e não pede conta, mas não tem garantia de uptime e corta
-em 200 requisições simultâneas: serve para testar, não para hospedar.
+The tunnel costs nothing and asks for no account, but it carries no uptime
+guarantee and cuts off at 200 concurrent requests: it is for testing, not for
+hosting.
 
-### Se o vídeo não chegar
+### When the video never arrives
 
-Tela preta e `ICE failed` no console significam que não existe caminho UDP
-direto até o SFU, quase sempre por NAT simétrico ou rede que bloqueia UDP de
-saída do lado de quem assiste. O conserto é o TURN: crie a chave em Realtime →
-TURN, preencha `TURN_APP_ID` e `TURN_APP_TOKEN` e reinicie o servidor, que lê o
-ambiente só no boot. O túnel segue de pé e a URL não muda.
+A black screen and `ICE failed` in the console mean there is no direct UDP path
+to the SFU, almost always a symmetric NAT or a network blocking outbound UDP on
+the viewer's side. TURN is the fix: create the key under Realtime → TURN, fill in
+`TURN_APP_ID` and `TURN_APP_TOKEN` and restart the server, which reads the
+environment only at boot. The tunnel stays up and the URL does not change.
 
-## Limitações conhecidas
+## Known limitations
 
-- **Áudio da tela** depende do navegador e do sistema. Chrome/Chromium com
-  PipeWire no Linux funciona; o Firefox não suporta áudio em `getDisplayMedia` de
-  jeito nenhum. Se o vídeo chega e o áudio não, o problema quase sempre é este, e
-  não o código.
-- **A mídia passa pela Cloudflare** mesmo com o app rodando local. Isso é
-  inerente ao SFU deles — ver "Uso de banda" acima.
-- **A sala vive em memória.** Reiniciar o servidor esvazia a sala, e todo mundo
-  reconecta sozinho.
+- **Screen audio** depends on the browser and the operating system.
+  Chrome/Chromium with PipeWire on Linux works; Firefox does not support audio in
+  `getDisplayMedia` at all. When the video arrives and the audio does not, this is
+  almost always the reason, not the code.
+- **The media travels through Cloudflare** even with the app running locally.
+  That is inherent to their SFU — see "Bandwidth" above.
+- **The room lives in memory.** Restarting the server empties it, and everyone
+  reconnects on their own.
 
 ---
 
-## Estrutura
+## Layout
 
-| Caminho | O que é |
+| Path | What it is |
 |---|---|
-| `shared/protocol.ts` | Contrato do WebSocket e validação, usado pelos dois lados |
-| `server/env.ts` | Ambiente lido e validado uma vez, no boot |
-| `server/session.ts` | Senha da sala e cookie assinado |
-| `server/room.ts` | Estado da sala, em memória |
-| `server/signaling.ts` | WebSocket: presença e endereços das tracks |
-| `server/main.ts` | Rotas HTTP e boot |
-| `client/src/useBroadcast.ts` | Publica a tela no SFU e anuncia para a sala |
-| `client/src/tracks.ts` | Singletons do PartyTracks e os tetos de 720p30 / 2,5 Mbps |
-| `client/src/components/Stage.tsx` | Painel principal: prévia local ou track remota |
-| `scripts/share.ts` | Build, servidor e túnel num comando (`pnpm share`) |
+| `shared/protocol.ts` | WebSocket contract and validation, used by both sides |
+| `server/env.ts` | Environment read and validated once, at boot |
+| `server/session.ts` | Room password and signed cookie |
+| `server/room.ts` | Room state, in memory |
+| `server/signaling.ts` | WebSocket: presence and track addresses |
+| `server/main.ts` | HTTP routes and boot |
+| `client/src/useBroadcast.ts` | Publishes the screen to the SFU and announces it to the room |
+| `client/src/tracks.ts` | PartyTracks singletons and the 720p30 / 2.5 Mbps ceilings |
+| `client/src/components/Stage.tsx` | Main panel: local preview or remote track |
+| `scripts/share.ts` | Build, server and tunnel in one command (`pnpm share`) |
 
 ```sh
 pnpm test        # vitest
@@ -202,8 +206,8 @@ pnpm typecheck   # tsc --noEmit
 
 ---
 
-## Licença
+## License
 
-[AGPL-3.0-only](LICENSE). É copyleft de rede: quem rodar uma versão modificada
-como serviço acessível pela internet tem de oferecer o código dessa versão aos
-usuários dela, não só a quem receber o binário.
+[AGPL-3.0-only](LICENSE). Network copyleft: anyone running a modified version as
+a service reachable over the internet has to offer that version's source to its
+users, not only to whoever receives a binary.
