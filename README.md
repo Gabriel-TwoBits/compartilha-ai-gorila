@@ -223,6 +223,10 @@ git remote add origin https://codeberg.org/<seu-usuário>/compartilha-ai-gorila.
 git push -u origin main
 ```
 
+O `.env` fica de fora pelo `.gitignore`, e nenhum segredo jamais entrou no
+histórico — só o `.env.example`, com os campos em branco. Quem clonar precisa
+das próprias credenciais da Cloudflare e da própria `ROOM_PASSWORD`.
+
 ## Licença
 
 [AGPL-3.0-only](LICENSE). É copyleft de rede: quem rodar uma versão modificada
