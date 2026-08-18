@@ -120,16 +120,64 @@ assistindo.
 
 ---
 
-## Antes de tirar do localhost
+## Expondo para amigos (Cloudflare Tunnel)
 
-- **`http://localhost` funciona; `http://192.168.x.x` não.** Capturar a tela
-  exige um contexto seguro. Assim que o app sair da sua máquina, ele precisa de
-  HTTPS. O caminho mais curto é o [Cloudflare
-  Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/):
-  `cloudflared tunnel --url http://localhost:8787` dá uma URL HTTPS pública
-  apontando para o servidor local, de graça, sem abrir porta no roteador.
-- Quando isso acontecer, rode com `NODE_ENV=production` para que o cookie de
-  sessão passe a ser `Secure`.
+**`http://localhost` funciona; `http://192.168.x.x` não.** Capturar a tela exige
+um contexto seguro, então assim que o app sai da sua máquina ele precisa de
+HTTPS. Um *quick tunnel* resolve isso num comando: uma URL HTTPS pública
+apontando para o servidor local, sem conta na Cloudflare, sem domínio e sem
+abrir porta no roteador.
+
+**1. Instale o `cloudflared`.**
+
+```sh
+curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+sudo dpkg -i /tmp/cloudflared.deb
+```
+
+**2. Suba em modo produção.** Uma porta só, e o cookie de sessão sai `Secure`,
+como o HTTPS do túnel pede.
+
+```sh
+pnpm build
+pnpm start
+```
+
+**3. Abra o túnel, em outro terminal.**
+
+```sh
+cloudflared tunnel --url http://localhost:8787
+```
+
+Ele imprime uma URL do tipo `https://<quatro-palavras>.trycloudflare.com`. Mande
+para os amigos junto com a `ROOM_PASSWORD`, e peça que abram no Chrome/Chromium
+(ver "Limitações conhecidas"). Qualquer um com a URL cai na tela de login, então
+o portão continua sendo a senha. Derrubar o túnel mata o endereço; a próxima
+execução sorteia outro.
+
+Para exercitar o app em desenvolvimento, aponte o túnel para o Vite
+(`cloudflared tunnel --url http://localhost:5173`) em vez do Node — é por isso
+que `vite.config.ts` aceita hosts `.trycloudflare.com`. Nesse caminho o cookie
+sai sem `Secure` e o HMR pode reclamar pelo túnel; para testar com gente de
+verdade, prefira o modo produção acima.
+
+### Custo
+
+Nenhum. O quick tunnel é gratuito e nem pede conta, e SFU e TURN dividem a cota
+de 1.000 GB/mês descrita em "Uso de banda". O preço é não ter garantia de uptime
+e um teto de 200 requisições simultâneas — é ferramenta de teste, não de
+produção. URL fixa exige um domínio na Cloudflare e um *named tunnel*
+(`cloudflared tunnel login`, `create`, `route dns`, `run`); aí o host deixa de
+ser `.trycloudflare.com` e o `allowedHosts` do Vite não o cobre, mais um motivo
+para servir pelo Node.
+
+### Se o vídeo não chegar
+
+Tela preta e `ICE failed` no console significam que não existe caminho UDP
+direto até o SFU, quase sempre por NAT simétrico ou rede que bloqueia UDP de
+saída do lado de quem assiste. O conserto é o TURN: crie a chave em Realtime →
+TURN, preencha `TURN_APP_ID` e `TURN_APP_TOKEN` e reinicie o servidor, que lê o
+ambiente só no boot. O túnel segue de pé e a URL não muda.
 
 ## Limitações conhecidas
 
