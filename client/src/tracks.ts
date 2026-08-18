@@ -11,6 +11,24 @@ import type { TrackRef } from "@shared/protocol"
  * connections or two screen capture prompts.
  */
 
+/**
+ * Capture ceiling. Cloudflare bills egress once per viewer, so the cost of a
+ * stream multiplies by the size of the room — capping the source is the
+ * cheapest lever there is. 720p30 is plenty for watching someone play.
+ */
+const MAX_WIDTH = 1280
+const MAX_HEIGHT = 720
+const MAX_FRAMERATE = 30
+
+/**
+ * Encoder ceiling, in bits per second.
+ *
+ * The capture constraints bound the picture, not the bitrate: a busy 720p30
+ * screen still pushes well past this if the encoder is left to decide on its
+ * own. This is the number that actually bounds the bill.
+ */
+const MAX_BITRATE_BPS = 2_500_000
+
 let partyTracks: PartyTracks | null = null
 let screenshare: Screenshare | null = null
 
@@ -20,9 +38,23 @@ export function getPartyTracks(): PartyTracks {
 }
 
 export function getScreenshareSource(): Screenshare {
-  screenshare ??= getScreenshare({ audio: true, video: true })
+  screenshare ??= getScreenshare({
+    audio: true,
+    video: {
+      constraints: {
+        width: { max: MAX_WIDTH },
+        height: { max: MAX_HEIGHT },
+        frameRate: { max: MAX_FRAMERATE },
+      },
+    },
+  })
   return screenshare
 }
+
+/** Handed to `PartyTracks.push` to cap what the video encoder actually sends. */
+export const videoSendEncodings: RTCRtpEncodingParameters[] = [
+  { maxBitrate: MAX_BITRATE_BPS, maxFramerate: MAX_FRAMERATE },
+]
 
 /**
  * Narrows the SFU's loosely typed metadata down to an address we can put on the

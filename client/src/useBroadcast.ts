@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useObservable, useObservableAsValue } from "partytracks/react"
 import { catchError, combineLatest, of, startWith } from "rxjs"
 import type { ClientMessage } from "@shared/protocol"
-import { getPartyTracks, getScreenshareSource, toTrackRef } from "./tracks"
+import { getPartyTracks, getScreenshareSource, toTrackRef, videoSendEncodings } from "./tracks"
 import type { Signaling } from "./useSignaling"
 
 export type Broadcasting = {
@@ -40,7 +40,9 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
 
     setError(null)
 
-    const video$ = partyTracks.push(screenshare.video.broadcastTrack$)
+    const video$ = partyTracks.push(screenshare.video.broadcastTrack$, {
+      sendEncodings$: of(videoSendEncodings),
+    })
     // Audio is optional: the picker only yields a track when "share audio" is
     // ticked, and on some platforms never. `startWith` lets the broadcast be
     // announced on video alone, then announced again once audio shows up.
