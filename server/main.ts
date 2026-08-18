@@ -11,6 +11,9 @@ import { signalingRoute, startHeartbeat, webSocketServer } from "./signaling"
 
 const CLIENT_BUILD_DIR = "./dist/client"
 
+/** Enough of an upstream error body to identify it, without flooding the log. */
+const MAX_LOGGED_BODY_CHARS = 500
+
 const app = new Hono<AppEnv>()
 
 app.post("/api/login", async (c) => {
@@ -73,16 +76,38 @@ async function withBufferedBody(request: Request): Promise<Request> {
 }
 
 /**
+ * Reports an SFU call the SFU itself rejected.
+ *
+ * Nothing else does: the client retries a failed push with backoff rather than
+ * failing it, so a track the SFU refuses surfaces as a broadcast that quietly
+ * never starts. The body carries the reason.
+ */
+async function logUpstreamFailure(path: string, response: Response): Promise<void> {
+  const body = await response
+    .clone()
+    .text()
+    .catch(() => "<unreadable body>")
+
+  console.error(
+    `SFU ${path} -> ${response.status} ${response.statusText}: ` +
+      body.slice(0, MAX_LOGGED_BODY_CHARS),
+  )
+}
+
+/**
  * Proxy to the Cloudflare Realtime SFU. This exists so `SFU_APP_TOKEN` stays on
  * the server, and it sits behind the session for the same reason.
  */
-app.all("/partytracks/*", requireSession, async (c) =>
-  routePartyTracksRequest({
+app.all("/partytracks/*", requireSession, async (c) => {
+  const response = await routePartyTracksRequest({
     appId: env.sfuAppId,
     token: env.sfuAppToken,
     request: await withBufferedBody(c.req.raw),
-  }),
-)
+  })
+
+  if (!response.ok) await logUpstreamFailure(c.req.path, response)
+  return response
+})
 
 app.get("/ws", requireSession, signalingRoute)
 
