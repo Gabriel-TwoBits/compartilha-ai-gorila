@@ -38,12 +38,28 @@ function exitCodeFor(code: number | null, signal: NodeJS.Signals | null): number
   return EXIT_FAILURE
 }
 
+/**
+ * Signals the child's whole process group. Both children are launchers that run
+ * the real work in a grandchild, and a signal delivered to the launcher alone
+ * leaves a Node process behind, still holding the port.
+ */
+function stop(child: ChildProcess): void {
+  const { pid } = child
+  if (pid === undefined) return
+
+  try {
+    process.kill(-pid, "SIGTERM")
+  } catch {
+    child.kill("SIGTERM")
+  }
+}
+
 function shutdown(exitCode: number): void {
   if (shuttingDown) return
   shuttingDown = true
   process.exitCode = exitCode
   for (const child of children) {
-    child.kill("SIGTERM")
+    stop(child)
   }
 }
 
@@ -72,6 +88,7 @@ function startServer(): ChildProcess {
   return spawn("./node_modules/.bin/tsx", ["--env-file=.env", "server/main.ts"], {
     cwd: projectRoot,
     stdio: "inherit",
+    detached: true,
     env: { ...process.env, NODE_ENV: "production" },
   })
 }
@@ -109,6 +126,7 @@ children.add(server)
 const tunnel = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${readPort()}`], {
   cwd: projectRoot,
   stdio: ["ignore", "pipe", "pipe"],
+  detached: true,
 })
 children.add(tunnel)
 
