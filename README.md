@@ -222,3 +222,9 @@ Crie o repositório vazio no Codeberg e depois:
 git remote add origin https://codeberg.org/<seu-usuário>/compartilha-ai-gorila.git
 git push -u origin main
 ```
+
+## Licença
+
+[AGPL-3.0-only](LICENSE). É copyleft de rede: quem rodar uma versão modificada
+como serviço acessível pela internet tem de oferecer o código dessa versão aos
+usuários dela, não só a quem receber o binário.
