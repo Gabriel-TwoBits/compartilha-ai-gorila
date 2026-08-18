@@ -8,6 +8,12 @@ import type { Signaling } from "./useSignaling"
 /** `useObservable` demands an observer; here the subscription itself is the point. */
 function ignore(): void {}
 
+/** Whatever rxjs hands the error callback, the footer needs a string. */
+function describePushError(pushError: unknown): string {
+  if (pushError instanceof Error) return `falha ao publicar a transmissão: ${pushError.message}`
+  return "falha ao publicar a transmissão"
+}
+
 export type Broadcasting = {
   isBroadcasting: boolean
   /** Last error while acquiring the screen, e.g. the picker being dismissed. */
@@ -61,12 +67,28 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
       catchError(() => of(null)),
     )
 
-    const subscription = combineLatest([video$, audio$]).subscribe(([videoMeta, audioMeta]) => {
-      const video = toTrackRef(videoMeta)
-      if (video === null) return
-      const message: ClientMessage = { type: "broadcast-start", video, audio: toTrackRef(audioMeta) }
-      announcement.current = message
-      send(message)
+    // A failing video push is otherwise invisible: it takes the announcement
+    // down with it, so the screen is captured, nobody ever receives it and the
+    // room reports nothing wrong. `error$` above only covers acquiring the
+    // screen, never publishing it.
+    const subscription = combineLatest([video$, audio$]).subscribe({
+      next: ([videoMeta, audioMeta]) => {
+        const video = toTrackRef(videoMeta)
+        if (video === null) {
+          setError("o SFU devolveu um endereço de trilha incompleto")
+          return
+        }
+        const message: ClientMessage = {
+          type: "broadcast-start",
+          video,
+          audio: toTrackRef(audioMeta),
+        }
+        announcement.current = message
+        send(message)
+      },
+      error: (pushError: unknown) => {
+        setError(describePushError(pushError))
+      },
     })
 
     return () => {
