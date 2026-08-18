@@ -17,9 +17,8 @@
     "skipLibCheck": true,
     "noEmit": true,
 
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["shared/*"]
+      "@shared/*": ["./shared/*"]
     }
   },
   "include": ["server", "client", "shared", "vite.config.ts"]

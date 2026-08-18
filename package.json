@@ -5,11 +5,11 @@
   "type": "module",
   "description": "Single room for sharing your screen and audio with friends, on Cloudflare Realtime SFU",
   "scripts": {
-    "dev": "concurrently -n servidor,cliente -c blue,magenta \"pnpm dev:server\" \"pnpm dev:client\"",
-    "dev:server": "tsx watch server/main.ts",
+    "dev": "concurrently -n server,client -c blue,magenta \"pnpm dev:server\" \"pnpm dev:client\"",
+    "dev:server": "tsx watch --env-file=.env server/main.ts",
     "dev:client": "vite",
     "build": "vite build",
-    "start": "NODE_ENV=production tsx server/main.ts",
+    "start": "NODE_ENV=production tsx --env-file=.env server/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

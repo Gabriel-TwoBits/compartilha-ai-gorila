@@ -96,21 +96,3 @@ export const sessionCookieOptions = {
   maxAge: SESSION_MAX_AGE_SECONDS,
   secure: env.isProduction,
 } as const
-
-/**
- * Reads the session cookie straight off a raw `Cookie` header. The WebSocket
- * upgrade never reaches Hono, so it cannot use Hono's cookie helpers.
- */
-export function readSessionCookie(cookieHeader: string | undefined): string | undefined {
-  if (cookieHeader === undefined) return undefined
-
-  for (const pair of cookieHeader.split(";")) {
-    const separatorIndex = pair.indexOf("=")
-    if (separatorIndex === -1) continue
-    const name = pair.slice(0, separatorIndex).trim()
-    if (name !== SESSION_COOKIE_NAME) continue
-    return decodeURIComponent(pair.slice(separatorIndex + 1).trim())
-  }
-
-  return undefined
-}
