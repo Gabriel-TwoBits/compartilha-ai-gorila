@@ -122,6 +122,51 @@ people watching.
 
 ---
 
+## Audio
+
+The footer carries a picker for where the broadcast's audio comes from. Its
+default, **Áudio da tela**, is whatever the screen picker itself handed over —
+and that depends entirely on the browser and the operating system:
+
+| | A browser tab | A window or the whole screen |
+|---|---|---|
+| Chromium on Windows | audio | audio |
+| Chromium on Linux | audio | **no audio** |
+| Firefox, anywhere | **no audio** | **no audio** |
+
+Window and full-screen audio needs an operating system loopback that Chromium
+implements on Windows and ChromeOS only ([Chromium issue
+40155218](https://issues.chromium.org/issues/40155218)), and Firefox implements
+no `getDisplayMedia` audio at all ([bug
+1541425](https://bugzilla.mozilla.org/show_bug.cgi?id=1541425)). Neither has
+anything to do with Wayland or with the desktop portal — X11 behaves the same.
+
+So on Linux, to carry the sound of a native application — a game, a video
+player — pick an audio **input** instead. PipeWire and PulseAudio expose every
+output as a `Monitor of …` source, and that source hears exactly what the
+speakers are playing:
+
+1. Click **Listar entradas**. Browsers hide device names until a capture
+   permission has been granted at least once.
+2. Pick `Monitor of <your output>`.
+
+The capture is pinned to that one device (`deviceId: { exact }`) and never falls
+back to another, so a monitor source that fails ends as an error in the footer
+rather than as your microphone going out to the room. Echo cancellation, noise
+suppression and gain control are all switched off: they are built for voice and
+ruin everything else. The choice is not persisted — every reload starts back on
+the screen capture.
+
+To send one application instead of the whole desktop, route it to a null sink in
+`pavucontrol` and pick that sink's monitor. You stop hearing it yourself unless
+you also load `module-loopback`.
+
+Chromium also hides an experimental loopback behind
+`chrome://flags/#pulseaudio-loopback-for-screen-share`, which is worth a try
+before reaching for any of the above.
+
+---
+
 ## Sharing it with friends (Cloudflare Tunnel)
 
 **`http://localhost` works; `http://192.168.x.x` does not.** Capturing the screen
@@ -173,10 +218,10 @@ environment only at boot. The tunnel stays up and the URL does not change.
 
 ## Known limitations
 
-- **Screen audio** depends on the browser and the operating system.
-  Chrome/Chromium with PipeWire on Linux works; Firefox does not support audio in
-  `getDisplayMedia` at all. When the video arrives and the audio does not, this is
-  almost always the reason, not the code.
+- **Screen audio** depends on the browser and the operating system, and on Linux
+  the screen picker hands over none. When the video arrives and the audio does
+  not, this is almost always the reason and not the code — see "Audio" above for
+  the way around it.
 - **The media travels through Cloudflare** even with the app running locally.
   That is inherent to their SFU — see "Bandwidth" above.
 - **The room lives in memory.** Restarting the server empties it, and everyone
@@ -196,6 +241,7 @@ environment only at boot. The tunnel stays up and the URL does not change.
 | `server/main.ts` | HTTP routes and boot |
 | `client/src/useBroadcast.ts` | Publishes the screen to the SFU and announces it to the room |
 | `client/src/tracks.ts` | PartyTracks singletons and the 720p30 / 2.5 Mbps ceilings |
+| `client/src/audioSource.ts` | Which audio source the broadcast uses, and its capture |
 | `client/src/components/Stage.tsx` | Main panel: local preview or remote track |
 | `scripts/share.ts` | Build, server and tunnel in one command (`pnpm share`) |
 
