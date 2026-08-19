@@ -3,6 +3,7 @@ import type { Participant } from "@shared/protocol"
 import { logout } from "../api"
 import { useBroadcast } from "../useBroadcast"
 import { useSignaling } from "../useSignaling"
+import { AudioSource } from "./AudioSource"
 import { Participants } from "./Participants"
 import { Stage } from "./Stage"
 
@@ -101,16 +102,20 @@ export function RoomScreen({ nickname, onLogout }: Props) {
           {broadcast.error ?? statusLine(signaling.connected, broadcasters.length)}
         </p>
 
-        <button
-          type="button"
-          onClick={broadcast.toggle}
-          className={[
-            "rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:brightness-110",
-            broadcast.isBroadcasting ? "bg-red-500 text-white" : "bg-accent text-accent-ink",
-          ].join(" ")}
-        >
-          {broadcast.isBroadcasting ? "⏹ Parar transmissão" : "🖥 Transmitir minha tela"}
-        </button>
+        <div className="flex items-center gap-3">
+          <AudioSource />
+
+          <button
+            type="button"
+            onClick={broadcast.toggle}
+            className={[
+              "rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:brightness-110",
+              broadcast.isBroadcasting ? "bg-red-500 text-white" : "bg-accent text-accent-ink",
+            ].join(" ")}
+          >
+            {broadcast.isBroadcasting ? "⏹ Parar transmissão" : "🖥 Transmitir minha tela"}
+          </button>
+        </div>
       </footer>
     </div>
   )

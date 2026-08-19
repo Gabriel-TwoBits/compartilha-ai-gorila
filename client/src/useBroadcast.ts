@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useObservable, useObservableAsValue } from "partytracks/react"
-import { catchError, combineLatest, of, startWith } from "rxjs"
+import { catchError, combineLatest, distinctUntilChanged, of, startWith, switchMap } from "rxjs"
 import type { ClientMessage } from "@shared/protocol"
+import { audioInputTrack$, audioSourceId$ } from "./audioSource"
 import { getPartyTracks, getScreenshareSource, toTrackRef, videoSendEncodings } from "./tracks"
 import type { Signaling } from "./useSignaling"
 
@@ -12,6 +13,12 @@ function ignore(): void {}
 function describePushError(pushError: unknown): string {
   if (pushError instanceof Error) return `falha ao publicar a transmissão: ${pushError.message}`
   return "falha ao publicar a transmissão"
+}
+
+/** A failing audio source must not take the broadcast down, but silence needs a reason. */
+function describeAudioError(audioError: unknown): string {
+  if (audioError instanceof Error) return `transmitindo sem áudio: ${audioError.message}`
+  return "transmitindo sem áudio"
 }
 
 export type Broadcasting = {
@@ -59,12 +66,24 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
     const video$ = partyTracks.push(screenshare.video.broadcastTrack$, {
       sendEncodings$: of(videoSendEncodings),
     })
-    // Audio is optional: the picker only yields a track when "share audio" is
-    // ticked, and on some platforms never. `startWith` lets the broadcast be
-    // announced on video alone, then announced again once audio shows up.
-    const audio$ = partyTracks.push(screenshare.audio.broadcastTrack$).pipe(
-      startWith(null),
-      catchError(() => of(null)),
+    // Audio is optional and its source is the user's to pick: the screen picker
+    // only yields a track when "share audio" is ticked, and on some platforms
+    // never — hence the hand-picked input, which is switched into the push
+    // without disturbing the video. `startWith` lets the broadcast be announced
+    // on video alone, then announced again once audio shows up.
+    const audio$ = audioSourceId$.pipe(
+      distinctUntilChanged(),
+      switchMap((sourceId) => {
+        const source$ =
+          sourceId === null ? screenshare.audio.broadcastTrack$ : audioInputTrack$(sourceId)
+        return partyTracks.push(source$).pipe(
+          startWith(null),
+          catchError((audioError: unknown) => {
+            setError(describeAudioError(audioError))
+            return of(null)
+          }),
+        )
+      }),
     )
 
     // A failing video push is otherwise invisible: it takes the announcement

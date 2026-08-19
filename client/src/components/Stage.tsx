@@ -223,7 +223,9 @@ function EmptyStage() {
         Clique em <strong className="text-ink">Transmitir minha tela</strong> e escolha o que
         compartilhar. Pra jogo em tela cheia, compartilhe{" "}
         <strong className="text-ink">a tela inteira</strong> e marque{" "}
-        <strong className="text-ink">"compartilhar áudio"</strong>.
+        <strong className="text-ink">"compartilhar áudio"</strong>. No Linux o navegador não
+        oferece essa opção fora de uma aba: escolha ali embaixo a entrada de áudio{" "}
+        <strong className="text-ink">Monitor of…</strong> pra levar o som junto.
       </p>
     </div>
   )
