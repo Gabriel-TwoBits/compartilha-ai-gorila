@@ -1,6 +1,7 @@
 import {
   type ChangeEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -19,6 +20,17 @@ const VOLUME_STEP = 0.05
 const videoClassName = "size-full object-contain"
 
 const frameClassName = "overflow-hidden rounded-2xl border border-dashed border-edge"
+
+/**
+ * The tile drops its card looks once it owns the whole screen: a dashed border
+ * along the screen edges and rounded corners over the black backdrop read as a
+ * rendering fault rather than as decoration.
+ */
+const fullscreenFrameClassName =
+  "[&:fullscreen]:rounded-none [&:fullscreen]:border-none [&:fullscreen]:bg-surface"
+
+const headerButtonClassName =
+  "shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted transition hover:bg-surface-raised hover:text-ink"
 
 /**
  * One tile per broadcast, reflowing as people start and stop. Rows never fall
@@ -180,20 +192,75 @@ function WatchGate({ nickname, onWatch }: { nickname: string; onWatch: () => voi
   )
 }
 
+/** The browser refusing fullscreen leaves nothing to recover from or report. */
+function ignoreRejection(): void {}
+
+/**
+ * Whether `element` is the one currently filling the screen. The event fires on
+ * the document for every tile at once, so each has to check for itself.
+ */
+function useIsFullscreen(element: RefObject<HTMLElement | null>): boolean {
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    function handleChange(): void {
+      setIsFullscreen(document.fullscreenElement === element.current)
+    }
+
+    document.addEventListener("fullscreenchange", handleChange)
+    return () => document.removeEventListener("fullscreenchange", handleChange)
+  }, [element])
+
+  return isFullscreen
+}
+
+/**
+ * The whole tile goes fullscreen, header included, rather than the video alone:
+ * the button that got us here is the one that has to take us back, and it can
+ * only do that while it is still on screen. The volume slider comes along for
+ * the same reason.
+ */
 function Tile({
   label,
   action,
+  fullscreenable,
   children,
 }: {
   label: string
   action: ReactNode
+  /** False for a tile showing no video, where filling the screen achieves nothing. */
+  fullscreenable: boolean
   children: ReactNode
 }) {
+  const frameRef = useRef<HTMLDivElement>(null)
+  const isFullscreen = useIsFullscreen(frameRef)
+
+  function toggleFullscreen(): void {
+    const element = frameRef.current
+    if (element === null) return
+    if (document.fullscreenElement === element) {
+      void document.exitFullscreen().catch(ignoreRejection)
+      return
+    }
+    // Another tile holding fullscreen is simply replaced by this one.
+    void element.requestFullscreen().catch(ignoreRejection)
+  }
+
   return (
-    <div className={`flex min-h-0 flex-col ${frameClassName}`}>
+    <div
+      ref={frameRef}
+      className={`flex min-h-0 flex-col ${frameClassName} ${fullscreenFrameClassName}`}
+    >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-3 py-2">
         <span className="truncate text-sm font-medium">{label}</span>
-        {action}
+        <div className="flex shrink-0 items-center gap-1">
+          {action}
+          {fullscreenable && (
+            <button type="button" onClick={toggleFullscreen} className={headerButtonClassName}>
+              {isFullscreen ? "⤡ Sair da tela cheia" : "⤢ Tela cheia"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="min-h-0 flex-1">{children}</div>
     </div>
@@ -202,11 +269,7 @@ function Tile({
 
 function StopWatchingButton({ onClose }: { onClose: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClose}
-      className="shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted transition hover:bg-surface-raised hover:text-ink"
-    >
+    <button type="button" onClick={onClose} className={headerButtonClassName}>
       ✕ Parar de assistir
     </button>
   )
@@ -262,7 +325,7 @@ export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
         // open and nothing to stop paying for.
         if (nickname === you) {
           return (
-            <Tile key={nickname} label="Sua tela" action={null}>
+            <Tile key={nickname} label="Sua tela" action={null} fullscreenable>
               <LocalPreview />
             </Tile>
           )
@@ -270,7 +333,7 @@ export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
 
         if (!opened.includes(nickname)) {
           return (
-            <Tile key={nickname} label={nickname} action={null}>
+            <Tile key={nickname} label={nickname} action={null} fullscreenable={false}>
               <WatchGate nickname={nickname} onWatch={() => onOpen(nickname)} />
             </Tile>
           )
@@ -281,6 +344,7 @@ export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
             key={nickname}
             label={nickname}
             action={<StopWatchingButton onClose={() => onClose(nickname)} />}
+            fullscreenable
           >
             {/* Keyed on the address so a republished track remounts with fresh pulls. */}
             <RemoteBroadcast
