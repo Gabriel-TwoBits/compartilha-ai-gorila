@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { type ReactNode, useEffect, useState } from "react"
 import type { Participant } from "@shared/protocol"
 import { logout } from "../api"
 import { type DesktopSource, desktopBridge } from "../desktop"
@@ -8,7 +8,7 @@ import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
 import { AudioModes } from "./AudioModes"
 import { Download, hasDownload } from "./Download"
-import { DownloadIcon, ScreenIcon, SpeakerIcon, StopIcon } from "./Icons"
+import { DownloadIcon, ScreenIcon, SpeakerIcon, SpinnerIcon, StopIcon } from "./Icons"
 import { AudioSource } from "./AudioSource"
 import { LevelMeter } from "./LevelMeter"
 import { Participants } from "./Participants"
@@ -40,16 +40,22 @@ function statusLine(connected: boolean, broadcasterCount: number): string {
  * The middle case exists because the handshake takes seconds a person cannot
  * account for. Without it the only sign anything is happening is the button
  * label, which says the same thing whether the SFU is slow or the whole attempt
- * has died.
+ * has died. The spinner belongs to that case alone: a step that names itself
+ * still reads as frozen next to text that never moves.
  */
 function footerLine(
   broadcast: Broadcasting,
   connected: boolean,
   broadcasterCount: number,
-): string {
+): ReactNode {
   if (broadcast.error !== null) return broadcast.error
   if (broadcast.isBroadcasting && broadcast.step !== "live") {
-    return `${describeStep(broadcast.step)}…`
+    return (
+      <>
+        <SpinnerIcon />
+        {`${describeStep(broadcast.step)}…`}
+      </>
+    )
   }
   return statusLine(connected, broadcasterCount)
 }
@@ -186,7 +192,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
       )}
 
       <footer className="flex items-center justify-between gap-4 px-4 py-3">
-        <p className="font-mono text-xs text-ink-muted">
+        <p className="flex items-center gap-2 font-mono text-xs text-ink-muted">
           {footerLine(broadcast, signaling.connected, broadcasters.length)}
         </p>
 

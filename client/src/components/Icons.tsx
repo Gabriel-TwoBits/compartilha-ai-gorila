@@ -18,7 +18,7 @@ const iconClassName = "size-[1.15em] shrink-0"
 
 const STROKE_WIDTH = 2
 
-function Stroked({ children }: { children: ReactNode }) {
+function Stroked({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -28,7 +28,7 @@ function Stroked({ children }: { children: ReactNode }) {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      className={iconClassName}
+      className={className === undefined ? iconClassName : `${iconClassName} ${className}`}
     >
       {children}
     </svg>
@@ -149,6 +149,21 @@ export function RestartIcon() {
     <Stroked>
       <path d="M21 12a9 9 0 1 1-2.6-6.4" />
       <path d="M21 4v5h-5" />
+    </Stroked>
+  )
+}
+
+/**
+ * A ring with a gap, turning: something is under way and has not failed.
+ *
+ * The gap is what makes the rotation readable — a whole circle spinning looks
+ * like a circle standing still.
+ */
+export function SpinnerIcon() {
+  return (
+    <Stroked className="animate-spin">
+      <circle cx="12" cy="12" r="9" className="opacity-30" />
+      <path d="M21 12a9 9 0 0 0-9-9" />
     </Stroked>
   )
 }
