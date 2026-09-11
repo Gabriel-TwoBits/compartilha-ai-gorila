@@ -34,4 +34,18 @@ contextBridge.exposeInMainWorld("gorila", {
 
   /** Retries the server, for the offline page. */
   reload: () => ipcRenderer.invoke("reload"),
+
+  /** Applications currently making sound, for the list to tick. */
+  audioApps: () => ipcRenderer.invoke("audio-apps"),
+
+  /** Applies a mode and answers with the source ids the PCM will carry. */
+  setAudioMode: (mode: unknown) => ipcRenderer.invoke("audio-mode", mode),
+
+  /** Subscribes to the PCM. Returns the unsubscribe. */
+  onAudioPcm: (listener: (sourceId: string, pcm: Uint8Array) => void) => {
+    const forward = (_event: unknown, sourceId: string, pcm: Uint8Array) =>
+      listener(sourceId, pcm)
+    ipcRenderer.on("audio-pcm", forward)
+    return () => ipcRenderer.off("audio-pcm", forward)
+  },
 })

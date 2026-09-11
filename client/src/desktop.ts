@@ -13,6 +13,25 @@ export type DesktopSource = {
   thumbnail: string
 }
 
+/**
+ * Where the broadcast's audio comes from, inside the app.
+ *
+ * "everything" is an inclusion of every application on the list, never a native
+ * exclusion: that one takes a single process tree, and more than one thing has
+ * to stay out. The list already omits what must never go out.
+ */
+export type AudioMode =
+  | { kind: "none" }
+  | { kind: "system" }
+  | { kind: "include"; pids: number[] }
+  | { kind: "everything" }
+
+export type AudioApp = {
+  pid: number
+  name: string
+  binary: string
+}
+
 export type DesktopBridge = {
   platform: string
   /**
@@ -26,6 +45,20 @@ export type DesktopBridge = {
   /** Raises the system picker. `false` means it was dismissed. */
   pickScreen: () => Promise<boolean>
   reload: () => void
+
+  /** Applications making sound right now. */
+  audioApps: () => Promise<AudioApp[]>
+
+  /**
+   * Applies a mode, answering with the ids the PCM will arrive under.
+   *
+   * These have to be exactly the ids the chunks carry: the mixer builds one
+   * worklet per id and drops, without a word, anything that does not match.
+   */
+  setAudioMode: (mode: AudioMode) => Promise<string[]>
+
+  /** Subscribes to the PCM. Returns the unsubscribe. */
+  onAudioPcm: (listener: (sourceId: string, pcm: Uint8Array) => void) => () => void
 }
 
 declare global {

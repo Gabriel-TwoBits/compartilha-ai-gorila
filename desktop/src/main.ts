@@ -1,5 +1,7 @@
 import { BrowserWindow, app, desktopCapturer, ipcMain, session, shell } from "electron"
 import { join } from "node:path"
+import type { AudioMode } from "./pipewireGraph"
+import * as pipewireAudio from "./audioPipewire"
 
 /**
  * Main process of the desktop shell.
@@ -7,7 +9,7 @@ import { join } from "node:path"
  * The window loads the room's own URL rather than a bundled page, so the whole
  * React client is reused as-is and the session cookie works without a bridge.
  * What this process adds is the two things a browser cannot do: list the
- * screens and windows itself, and (from phase 4) capture audio per application.
+ * screens and windows itself, and capture audio one application at a time.
  */
 
 const DEFAULT_SERVER_URL = "https://example.invalid"
@@ -104,6 +106,17 @@ async function pickScreen(): Promise<boolean> {
   return true
 }
 
+/**
+ * The audio backend for this platform.
+ *
+ * Only PipeWire exists so far. Windows needs a different one entirely — one
+ * WASAPI capture client per application, and therefore one source id per pid
+ * rather than the single one this backend returns.
+ */
+function audioBackend(): typeof pipewireAudio {
+  return pipewireAudio
+}
+
 function isOurOrigin(url: string): boolean {
   try {
     return new URL(url).origin === new URL(serverUrl).origin
@@ -191,6 +204,19 @@ app.whenReady().then(() => {
 
   ipcMain.handle("sources", listSources)
   ipcMain.handle("pick-screen", pickScreen)
+
+  ipcMain.handle("audio-apps", () => audioBackend().listApps())
+
+  // Returns the source ids the PCM will arrive under. The renderer builds one
+  // worklet per id and drops, in silence, any chunk whose id has no worklet —
+  // so these two must be the same list, always.
+  ipcMain.handle("audio-mode", (_event, mode: AudioMode) =>
+    audioBackend().setMode(mode, (sourceId, pcm) => {
+      // `send` copies the buffer, so the recorder's own chunk is never handed
+      // across and then reused underneath the renderer.
+      window?.webContents.send("audio-pcm", sourceId, pcm)
+    }),
+  )
   ipcMain.handle("reload", () => {
     void window?.loadURL(serverUrl)
   })
@@ -200,6 +226,15 @@ app.whenReady().then(() => {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+// Leaving the null sink loaded would put a phantom audio device on the
+// person's machine that outlives the app.
+app.on("will-quit", (event) => {
+  event.preventDefault()
+  void audioBackend()
+    .stop()
+    .finally(() => app.exit(0))
 })
 
 app.on("window-all-closed", () => {

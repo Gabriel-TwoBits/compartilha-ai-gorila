@@ -85,8 +85,32 @@ export async function listApps(): Promise<{ pid: number; name: string; binary: s
   return audioApps(graph).map(({ pid, name, binary }) => ({ pid, name, binary }))
 }
 
+/**
+ * Unloads sinks of ours that outlived a previous run.
+ *
+ * Tearing down on exit only covers a clean exit. A crash, a kill, or a session
+ * that ends with the machine — none of those run it, and each leaves a phantom
+ * audio device that survives on the person's machine and shows up in every
+ * volume control from then on. Clearing them at startup is what makes that
+ * self-healing instead of cumulative.
+ */
+async function unloadStaleSinks(): Promise<void> {
+  const { stdout } = await run("pactl", ["list", "short", "modules"]).catch(() => ({ stdout: "" }))
+
+  for (const line of stdout.split("\n")) {
+    const [id, name, args] = line.split("\t")
+    if (name !== "module-null-sink") continue
+    if (args === undefined || !args.includes(`sink_name=${SINK_NAME}`)) continue
+    if (id === undefined) continue
+    await run("pactl", ["unload-module", id]).catch(() => undefined)
+  }
+}
+
 async function ensureSink(): Promise<void> {
   if (sinkModule !== null) return
+
+  await unloadStaleSinks()
+
   const { stdout } = await run("pactl", [
     "load-module",
     "module-null-sink",

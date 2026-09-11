@@ -6,6 +6,7 @@ import { chooseSource } from "../desktopScreenshare"
 import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
 import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
+import { AudioModes } from "./AudioModes"
 import { AudioSource } from "./AudioSource"
 import { LevelMeter } from "./LevelMeter"
 import { Participants } from "./Participants"
@@ -63,6 +64,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
    * choice.
    */
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [audioPanelOpen, setAudioPanelOpen] = useState(false)
   const bridge = desktopBridge()
   const picksOwnSource = bridge !== null && !bridge.usesPortal
 
@@ -156,6 +158,12 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         <Participants participants={participants} you={you} />
       </div>
 
+      {audioPanelOpen && bridge !== null && (
+        <div className="border-t border-edge px-4 py-3">
+          <AudioModes />
+        </div>
+      )}
+
       <footer className="flex items-center justify-between gap-4 px-4 py-3">
         <p className="font-mono text-xs text-ink-muted">
           {footerLine(broadcast, signaling.connected, broadcasters.length)}
@@ -164,7 +172,18 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         <div className="flex items-center gap-3">
           {broadcast.isBroadcasting && <LevelMeter track={broadcast.audioTrack} />}
           <Quality />
-          <AudioSource />
+          {bridge === null ? (
+            <AudioSource />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAudioPanelOpen((open) => !open)}
+              aria-expanded={audioPanelOpen}
+              className="rounded-md border border-edge bg-surface-raised px-2 py-1.5 text-xs text-ink transition hover:brightness-110"
+            >
+              🔈 Áudio
+            </button>
+          )}
 
           <button
             type="button"

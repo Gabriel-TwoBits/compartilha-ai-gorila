@@ -12,6 +12,7 @@ import {
   shareReplay,
   switchMap,
 } from "rxjs"
+import { processAudioTrack$ } from "./processAudio"
 
 /**
  * Where the broadcast's audio comes from: `null` is whatever the screen picker
@@ -26,12 +27,36 @@ import {
  */
 export type AudioSourceId = string | null
 
+/**
+ * Marks the per-application capture, which only the desktop app has.
+ *
+ * A sentinel rather than another device id: nothing the browser enumerates can
+ * ever collide with it, and the switch below stays a plain three-way choice.
+ */
+export const PROCESS_AUDIO_SOURCE = "process-audio"
+
 const selectedAudioSource = new BehaviorSubject<AudioSourceId>(null)
 
 export const audioSourceId$: Observable<AudioSourceId> = selectedAudioSource.asObservable()
 
 export function selectAudioSource(sourceId: AudioSourceId): void {
   selectedAudioSource.next(sourceId)
+}
+
+/**
+ * The track for a chosen source: whatever the screen picker handed over, one
+ * specific input, or the mix of captured applications.
+ *
+ * The last one is the reason the desktop app exists — it is the only route that
+ * carries a game without carrying the call alongside it.
+ */
+export function audioSourceTrack$(
+  sourceId: AudioSourceId,
+  screenAudio$: Observable<MediaStreamTrack>,
+): Observable<MediaStreamTrack> {
+  if (sourceId === null) return screenAudio$
+  if (sourceId === PROCESS_AUDIO_SOURCE) return processAudioTrack$
+  return audioInputTrack$(sourceId)
 }
 
 /** `navigator.mediaDevices` is absent on an insecure origin, where none of this works. */

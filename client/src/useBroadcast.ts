@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useObservable, useObservableAsValue } from "partytracks/react"
 import { catchError, combineLatest, distinctUntilChanged, of, startWith, switchMap, tap } from "rxjs"
 import type { ClientMessage } from "@shared/protocol"
-import { audioInputTrack$, audioSourceId$ } from "./audioSource"
+import { audioSourceId$, audioSourceTrack$ } from "./audioSource"
 import {
   applyQualityToTrack,
   getPartyTracks,
@@ -141,9 +141,7 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
     // alone, then announced again once audio shows up.
     const audioSource$ = audioSourceId$.pipe(
       distinctUntilChanged(),
-      switchMap((sourceId) =>
-        sourceId === null ? screenshare.audio.broadcastTrack$ : audioInputTrack$(sourceId),
-      ),
+      switchMap((sourceId) => audioSourceTrack$(sourceId, screenshare.audio.broadcastTrack$)),
       tap((track) => setAudioTrack(track)),
     )
     const audio$ = partyTracks.push(audioSource$).pipe(
