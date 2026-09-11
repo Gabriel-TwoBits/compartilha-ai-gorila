@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react"
 import { MAX_NICKNAME_LENGTH } from "@shared/protocol"
 import { type LoginFailure, login } from "../api"
-import { Download } from "./Download"
+import { Download, hasDownload } from "./Download"
 
 const FAILURE_MESSAGES: Record<LoginFailure, string> = {
   invalid_nickname: "Escolha um apelido válido.",
@@ -84,7 +84,13 @@ export function LoginScreen({ onLogin }: Props) {
           {submitting ? "Entrando…" : "Entrar"}
         </button>
 
-        <Download />
+        {/* The frame belongs here, not in the component: the room shows the same
+            thing inside a panel that looks nothing like this card. */}
+        {hasDownload() && (
+          <div className="mt-6 border-t border-edge pt-5">
+            <Download />
+          </div>
+        )}
       </form>
     </div>
   )

@@ -5,27 +5,35 @@ const linkClassName =
   "block rounded-lg border border-edge px-3 py-2 text-center text-sm text-ink transition hover:bg-surface-raised"
 
 /**
- * Offers the desktop app, on the login screen.
+ * Whether this machine has anything to download.
  *
- * Here rather than inside the room because it has to work before anybody has
- * typed the password: the whole point is that a friend opens the link and
- * leaves with the right file. It is the one manual download the app ever asks
- * for — after it, the app updates itself.
+ * False inside the app itself — offering somebody what they are already
+ * running — and false where there is no build, such as macOS or a phone.
+ * Callers use it to decide whether to render a way in at all, so nothing opens
+ * onto an empty panel.
+ */
+export function hasDownload(): boolean {
+  if (isDesktop()) return false
+  return downloadsFor(detectTarget(navigator.platform, navigator.userAgent)).length > 0
+}
+
+/**
+ * Offers the desktop app.
  *
- * Invisible inside the app itself, which would be offering someone what they
- * are already running.
+ * Deliberately without a frame of its own: it appears in two places that look
+ * nothing alike — inside the login card, and in a panel of the room — and each
+ * one wraps it. It is the one manual download the app ever asks for; after it,
+ * the app updates itself.
  */
 export function Download() {
-  if (isDesktop()) return null
+  if (!hasDownload()) return null
 
   const target = detectTarget(navigator.platform, navigator.userAgent)
   const links = downloadsFor(target)
-  if (links.length === 0) return null
-
   const pitch = pitchFor(target)
 
   return (
-    <div className="mt-6 border-t border-edge pt-5">
+    <>
       {pitch !== null && <p className="mb-3 text-xs text-ink-muted">{pitch}</p>}
 
       <div className="flex flex-col gap-2">
@@ -48,6 +56,6 @@ export function Download() {
       <p className="mt-3 text-xs text-ink-muted">
         Para assistir, o site já basta. O app é para quem transmite.
       </p>
-    </div>
+    </>
   )
 }

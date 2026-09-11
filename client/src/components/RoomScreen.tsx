@@ -7,6 +7,7 @@ import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
 import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
 import { AudioModes } from "./AudioModes"
+import { Download, hasDownload } from "./Download"
 import { AudioSource } from "./AudioSource"
 import { LevelMeter } from "./LevelMeter"
 import { Participants } from "./Participants"
@@ -19,6 +20,10 @@ type Props = {
   nickname: string
   onLogout: () => void
 }
+
+/** Shared by the two toggles that open a panel above the footer. */
+const panelButtonClassName =
+  "rounded-md border border-edge bg-surface-raised px-2 py-1.5 text-xs text-ink transition hover:brightness-110"
 
 function statusLine(connected: boolean, broadcasterCount: number): string {
   if (!connected) return "reconectando…"
@@ -64,9 +69,18 @@ export function RoomScreen({ nickname, onLogout }: Props) {
    * choice.
    */
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [audioPanelOpen, setAudioPanelOpen] = useState(false)
+
+  /**
+   * Which panel is open above the footer, if any. One at a time: they share
+   * the strip, and stacking them would push the stage around.
+   */
+  const [panel, setPanel] = useState<"audio" | "download" | null>(null)
   const bridge = desktopBridge()
   const picksOwnSource = bridge !== null && !bridge.usesPortal
+
+  function togglePanel(which: "audio" | "download"): void {
+    setPanel((open) => (open === which ? null : which))
+  }
 
   function handleBroadcastClick(): void {
     if (broadcast.isBroadcasting || !picksOwnSource) {
@@ -158,9 +172,15 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         <Participants participants={participants} you={you} />
       </div>
 
-      {audioPanelOpen && bridge !== null && (
+      {panel === "audio" && bridge !== null && (
         <div className="border-t border-edge px-4 py-3">
           <AudioModes />
+        </div>
+      )}
+
+      {panel === "download" && (
+        <div className="border-t border-edge px-4 py-3">
+          <Download />
         </div>
       )}
 
@@ -177,11 +197,24 @@ export function RoomScreen({ nickname, onLogout }: Props) {
           ) : (
             <button
               type="button"
-              onClick={() => setAudioPanelOpen((open) => !open)}
-              aria-expanded={audioPanelOpen}
-              className="rounded-md border border-edge bg-surface-raised px-2 py-1.5 text-xs text-ink transition hover:brightness-110"
+              onClick={() => togglePanel("audio")}
+              aria-expanded={panel === "audio"}
+              className={panelButtonClassName}
             >
               🔈 Áudio
+            </button>
+          )}
+
+          {/* Where the need actually shows up: somebody goes to broadcast
+              and finds the browser will not carry the game's sound. */}
+          {hasDownload() && (
+            <button
+              type="button"
+              onClick={() => togglePanel("download")}
+              aria-expanded={panel === "download"}
+              className={panelButtonClassName}
+            >
+              ⬇ Baixar o app
             </button>
           )}
 
