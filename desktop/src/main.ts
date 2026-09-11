@@ -199,9 +199,6 @@ function createWindow(): void {
     // The installer stamps the icon onto the executable, but a window started
     // from `npm start` is born with Electron's default atom without this.
     icon: join(__dirname, "..", "build", "icon.png"),
-    // The native frame stays. A frameless window swallows `requestFullscreen`
-    // — the promise neither resolves nor rejects — and the client's own
-    // fullscreen button would have to become an IPC call for no gain.
     webPreferences: {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -214,6 +211,15 @@ function createWindow(): void {
   })
 
   window.once("ready-to-show", () => window?.show())
+
+  // `requestFullscreen` is swallowed here: the promise neither resolves nor
+  // rejects, `document.fullscreenElement` stays null and nothing fills the
+  // screen. So the window does it, and the page lifts the tile out of the flow
+  // on its own. Leaving by F11 or Escape never passes through the page, hence
+  // the events — without them the tile would go on covering a window that is
+  // back to its normal size.
+  window.on("enter-full-screen", () => window?.webContents.send("fullscreen", true))
+  window.on("leave-full-screen", () => window?.webContents.send("fullscreen", false))
 
   // The page is remote, so treat it as remote: it may only navigate within its
   // own origin, and anything it opens goes to the real browser.
@@ -311,6 +317,11 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle("reload", () => {
     void window?.loadURL(serverUrl)
+  })
+
+  // The page cannot do this for itself: see `createWindow`.
+  ipcMain.handle("fullscreen", (_event, on: boolean) => {
+    window?.setFullScreen(on)
   })
 
   createWindow()

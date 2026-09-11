@@ -42,6 +42,16 @@ contextBridge.exposeInMainWorld("gorila", {
   /** Retries the server, for the offline page. */
   reload: () => ipcRenderer.invoke("reload"),
 
+  /** Fills the screen with the window. The DOM's own call is swallowed here. */
+  setFullscreen: (on: boolean) => ipcRenderer.invoke("fullscreen", on),
+
+  /** Subscribes to fullscreen, F11 and Escape included. Returns the unsubscribe. */
+  onFullscreen: (listener: (on: boolean) => void) => {
+    const forward = (_event: unknown, on: boolean) => listener(on)
+    ipcRenderer.on("fullscreen", forward)
+    return () => ipcRenderer.off("fullscreen", forward)
+  },
+
   /** Applications currently making sound, for the list to tick. */
   audioApps: () => ipcRenderer.invoke("audio-apps"),
 

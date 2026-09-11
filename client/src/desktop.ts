@@ -66,6 +66,17 @@ export type DesktopBridge = {
   pickScreen: () => Promise<boolean>
   reload: () => void
 
+  /**
+   * Fills the screen with the window itself.
+   *
+   * Electron swallows `requestFullscreen`: the promise never settles and
+   * nothing happens. Taking the window fullscreen is the only route that
+   * works, and lifting the tile out of the flow is then the page's own job.
+   */
+  setFullscreen: (on: boolean) => void
+  /** Subscribes to fullscreen, F11 and Escape included. Returns the unsubscribe. */
+  onFullscreen: (listener: (on: boolean) => void) => () => void
+
   /** Applications making sound right now. */
   audioApps: () => Promise<AudioApp[]>
 

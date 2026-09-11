@@ -1,7 +1,6 @@
 import {
   type ChangeEvent,
   type ReactNode,
-  type RefObject,
   useCallback,
   useEffect,
   useMemo,
@@ -12,7 +11,15 @@ import { type TrackMetadata, createAudioSink } from "partytracks/client"
 import { useObservable } from "partytracks/react"
 import { type Observable, of } from "rxjs"
 import type { Broadcast, Participant } from "@shared/protocol"
+import { useFullscreen } from "../fullscreen"
 import { getScreenshareSource, getWatchTracks } from "../tracks"
+import {
+  CloseIcon,
+  EnterFullscreenIcon,
+  ExitFullscreenIcon,
+  PlayIcon,
+  SpeakerIcon,
+} from "./Icons"
 
 const DEFAULT_VOLUME = 1
 const VOLUME_STEP = 0.05
@@ -22,12 +29,15 @@ const videoClassName = "size-full object-contain"
 const frameClassName = "overflow-hidden rounded-2xl border border-dashed border-edge"
 
 /**
- * The tile drops its card looks once it owns the whole screen: a dashed border
- * along the screen edges and rounded corners over the black backdrop read as a
- * rendering fault rather than as decoration.
+ * The tile while it owns the whole screen.
+ *
+ * The card looks go: a dashed border along the screen edges and rounded corners
+ * over the black backdrop read as a rendering fault rather than as decoration.
+ * Leaving the grid's flow is what the desktop app needs — there the window goes
+ * fullscreen natively and nothing would move the tile on its own — and in a
+ * browser it only repeats what the fullscreen element already is.
  */
-const fullscreenFrameClassName =
-  "[&:fullscreen]:rounded-none [&:fullscreen]:border-none [&:fullscreen]:bg-surface"
+const fullscreenFrameClassName = "fixed inset-0 z-50 rounded-none border-none bg-surface"
 
 const headerButtonClassName =
   "shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted transition hover:bg-surface-raised hover:text-ink"
@@ -144,15 +154,16 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
         <button
           type="button"
           onClick={startAudio}
-          className="absolute top-3 left-3 rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink"
+          className="absolute top-3 left-3 flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink"
         >
-          🔊 Clique para ouvir
+          <SpeakerIcon />
+          Clique para ouvir
         </button>
       )}
 
       {audioTrack$ !== null && !audioBlocked && (
         <label className="absolute right-3 bottom-3 flex items-center gap-2 rounded-md bg-surface/80 px-3 py-1.5 text-xs text-ink-muted">
-          🔊
+          <SpeakerIcon />
           <input
             type="range"
             min={0}
@@ -184,34 +195,13 @@ function WatchGate({ nickname, onWatch }: { nickname: string; onWatch: () => voi
       <button
         type="button"
         onClick={onWatch}
-        className="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition hover:brightness-110"
+        className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition hover:brightness-110"
       >
-        ▶ Assistir transmissão
+        <PlayIcon />
+        Assistir transmissão
       </button>
     </div>
   )
-}
-
-/** The browser refusing fullscreen leaves nothing to recover from or report. */
-function ignoreRejection(): void {}
-
-/**
- * Whether `element` is the one currently filling the screen. The event fires on
- * the document for every tile at once, so each has to check for itself.
- */
-function useIsFullscreen(element: RefObject<HTMLElement | null>): boolean {
-  const [isFullscreen, setIsFullscreen] = useState(false)
-
-  useEffect(() => {
-    function handleChange(): void {
-      setIsFullscreen(document.fullscreenElement === element.current)
-    }
-
-    document.addEventListener("fullscreenchange", handleChange)
-    return () => document.removeEventListener("fullscreenchange", handleChange)
-  }, [element])
-
-  return isFullscreen
 }
 
 /**
@@ -233,31 +223,32 @@ function Tile({
   children: ReactNode
 }) {
   const frameRef = useRef<HTMLDivElement>(null)
-  const isFullscreen = useIsFullscreen(frameRef)
+  const { isFullscreen, toggle } = useFullscreen(frameRef)
 
-  function toggleFullscreen(): void {
-    const element = frameRef.current
-    if (element === null) return
-    if (document.fullscreenElement === element) {
-      void document.exitFullscreen().catch(ignoreRejection)
-      return
-    }
-    // Another tile holding fullscreen is simply replaced by this one.
-    void element.requestFullscreen().catch(ignoreRejection)
-  }
+  const fullscreenLabel = isFullscreen ? "Sair da tela cheia" : "Tela cheia"
 
   return (
     <div
       ref={frameRef}
-      className={`flex min-h-0 flex-col ${frameClassName} ${fullscreenFrameClassName}`}
+      className={[
+        "flex min-h-0 flex-col",
+        frameClassName,
+        isFullscreen ? fullscreenFrameClassName : "",
+      ].join(" ")}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-3 py-2">
         <span className="truncate text-sm font-medium">{label}</span>
         <div className="flex shrink-0 items-center gap-1">
           {action}
           {fullscreenable && (
-            <button type="button" onClick={toggleFullscreen} className={headerButtonClassName}>
-              {isFullscreen ? "⤡ Sair da tela cheia" : "⤢ Tela cheia"}
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={fullscreenLabel}
+              title={fullscreenLabel}
+              className={headerButtonClassName}
+            >
+              {isFullscreen ? <ExitFullscreenIcon /> : <EnterFullscreenIcon />}
             </button>
           )}
         </div>
@@ -269,8 +260,14 @@ function Tile({
 
 function StopWatchingButton({ onClose }: { onClose: () => void }) {
   return (
-    <button type="button" onClick={onClose} className={headerButtonClassName}>
-      ✕ Parar de assistir
+    <button
+      type="button"
+      onClick={onClose}
+      aria-label="Parar de assistir"
+      title="Parar de assistir"
+      className={headerButtonClassName}
+    >
+      <CloseIcon />
     </button>
   )
 }
