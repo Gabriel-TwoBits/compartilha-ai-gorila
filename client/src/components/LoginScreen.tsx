@@ -39,8 +39,9 @@ export function LoginScreen({ onLogin }: Props) {
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-2xl border border-edge bg-surface-raised p-8 shadow-2xl"
       >
-        <h1 className="mb-1 text-2xl font-semibold">
-          🦍 Compartilha<span className="text-accent">AíGorila</span>
+        <h1 className="mb-1 flex items-center gap-2.5 text-2xl font-semibold">
+          <img src="/icon.png" alt="" className="size-8" />
+          Compartilha<span className="text-accent">AíGorila</span>
         </h1>
         <p className="mb-8 text-sm text-ink-muted">Entre na sala pra assistir ou transmitir.</p>
 

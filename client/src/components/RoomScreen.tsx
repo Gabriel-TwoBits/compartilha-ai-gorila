@@ -124,8 +124,9 @@ export function RoomScreen({ nickname, onLogout }: Props) {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-edge px-4 py-3">
-        <span className="text-lg font-semibold">
-          🦍 Compartilha<span className="text-accent">AíGorila</span>
+        <span className="flex items-center gap-2 text-lg font-semibold">
+          <img src="/icon.png" alt="" className="size-6" />
+          Compartilha<span className="text-accent">AíGorila</span>
         </span>
 
         <div className="flex items-center gap-3">

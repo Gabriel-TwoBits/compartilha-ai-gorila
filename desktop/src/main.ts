@@ -120,6 +120,9 @@ function createWindow(): void {
     minHeight: MIN_WINDOW_HEIGHT,
     backgroundColor: BACKGROUND_COLOR,
     show: false,
+    // The installer stamps the icon onto the executable, but a window started
+    // from `npm start` is born with Electron's default atom without this.
+    icon: join(__dirname, "..", "build", "icon.png"),
     // The native frame stays. A frameless window swallows `requestFullscreen`
     // — the promise neither resolves nor rejects — and the client's own
     // fullscreen button would have to become an IPC call for no gain.
