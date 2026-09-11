@@ -5,6 +5,7 @@ import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
 import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
 import { AudioSource } from "./AudioSource"
+import { LevelMeter } from "./LevelMeter"
 import { Participants } from "./Participants"
 import { Quality } from "./Quality"
 import { SoundToggle } from "./SoundToggle"
@@ -129,6 +130,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         </p>
 
         <div className="flex items-center gap-3">
+          {broadcast.isBroadcasting && <LevelMeter track={broadcast.audioTrack} />}
           <Quality />
           <AudioSource />
 

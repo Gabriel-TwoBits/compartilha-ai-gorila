@@ -56,6 +56,12 @@ export type Broadcasting = {
   error: string | null
   /** How far along the handshake is, while `isBroadcasting` and not yet `live`. */
   step: BroadcastStep
+  /**
+   * The audio actually going out, or `null` when none is. The level meter reads
+   * it: "did I pick the right source?" has no honest answer but watching the bar
+   * move when the game makes noise.
+   */
+  audioTrack: MediaStreamTrack | null
   toggle: () => void
 }
 
@@ -75,6 +81,7 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
   const isBroadcasting = useObservableAsValue(screenshare.isBroadcasting$, false)
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<BroadcastStep>("capturing")
+  const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null)
 
   // `isBroadcasting$` is only ever fed from inside the `broadcastTrack$`
   // pipeline, and that pipeline is ref-counted: with nobody subscribed,
@@ -137,6 +144,7 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
       switchMap((sourceId) =>
         sourceId === null ? screenshare.audio.broadcastTrack$ : audioInputTrack$(sourceId),
       ),
+      tap((track) => setAudioTrack(track)),
     )
     const audio$ = partyTracks.push(audioSource$).pipe(
       startWith(null),
@@ -176,6 +184,7 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
       subscription.unsubscribe()
       announcement.current = null
       captureTrack.current = null
+      setAudioTrack(null)
       send({ type: "broadcast-stop" })
     }
   }, [isBroadcasting, partyTracks, screenshare, send])
@@ -194,7 +203,7 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
   }, [screenshare])
 
   return useMemo(
-    () => ({ isBroadcasting, error, step, toggle }),
-    [isBroadcasting, error, step, toggle],
+    () => ({ isBroadcasting, error, step, audioTrack, toggle }),
+    [isBroadcasting, error, step, audioTrack, toggle],
   )
 }
