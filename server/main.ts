@@ -12,6 +12,18 @@ import { signalingRoute, startHeartbeat, webSocketServer } from "./signaling"
 
 const CLIENT_BUILD_DIR = "./dist/client"
 
+/**
+ * Where the desktop app's installers live, and the update feed with them.
+ *
+ * Outside `dist/` on purpose: Vite builds the client with `emptyOutDir`, so
+ * anything dropped in there disappears at the next build — including the
+ * installers a release just published.
+ */
+const RELEASE_DIR = "./release"
+
+/** Public path for the same. Both the first download and every update use it. */
+const RELEASE_ROUTE = "/atualiza"
+
 /** Enough of an upstream error body to identify it, without flooding the log. */
 const MAX_LOGGED_BODY_CHARS = 500
 
@@ -181,6 +193,21 @@ app.all("/partytracks/*", requireSession, async (c) => {
 })
 
 app.get("/ws", requireSession, signalingRoute)
+
+/**
+ * Installers and the update feed, served to anyone.
+ *
+ * No session in front: the first download happens before anybody has an
+ * account of any kind, and what is behind it is a binary the whole room is
+ * meant to have. The room itself stays gated by the password.
+ */
+app.use(
+  `${RELEASE_ROUTE}/*`,
+  serveStatic({
+    root: RELEASE_DIR,
+    rewriteRequestPath: (path) => path.slice(RELEASE_ROUTE.length),
+  }),
+)
 
 // In development Vite serves the UI and proxies these routes here instead.
 if (env.isProduction) {

@@ -32,6 +32,19 @@ export type AudioApp = {
   binary: string
 }
 
+/** What the app knows about updating itself, at this moment. */
+export type UpdateState = {
+  /**
+   * `idle` and `current` are different things: "have not looked yet" and
+   * "looked, and there is nothing" both leave the interface quiet, and telling
+   * them apart is the only way to answer a click honestly.
+   */
+  phase: "idle" | "checking" | "current" | "downloading" | "ready" | "failed"
+  percent: number
+  version: string | null
+  error: string | null
+}
+
 export type DesktopBridge = {
   platform: string
   /**
@@ -66,6 +79,12 @@ export type DesktopBridge = {
 
   /** Subscribes to the PCM. Returns the unsubscribe. */
   onAudioPcm: (listener: (sourceId: string, pcm: Uint8Array) => void) => () => void
+
+  updateState: () => Promise<UpdateState>
+  checkUpdate: () => Promise<UpdateState>
+  installUpdate: () => void
+  /** Subscribes to update progress. Returns the unsubscribe. */
+  onUpdateState: (listener: (state: UpdateState) => void) => () => void
 }
 
 declare global {

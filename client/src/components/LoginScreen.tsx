@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react"
 import { MAX_NICKNAME_LENGTH } from "@shared/protocol"
 import { type LoginFailure, login } from "../api"
+import { Download } from "./Download"
 
 const FAILURE_MESSAGES: Record<LoginFailure, string> = {
   invalid_nickname: "Escolha um apelido válido.",
@@ -82,6 +83,8 @@ export function LoginScreen({ onLogin }: Props) {
         >
           {submitting ? "Entrando…" : "Entrar"}
         </button>
+
+        <Download />
       </form>
     </div>
   )

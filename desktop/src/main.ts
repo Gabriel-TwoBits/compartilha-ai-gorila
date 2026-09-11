@@ -3,6 +3,7 @@ import { join } from "node:path"
 import type { AudioMode } from "./audioMode"
 import * as pipewireAudio from "./audioPipewire"
 import * as wasapiAudio from "./audioWasapi"
+import * as updates from "./update"
 
 /**
  * Main process of the desktop shell.
@@ -222,6 +223,16 @@ app.whenReady().then(() => {
   ipcMain.handle("pick-screen", pickScreen)
 
   ipcMain.handle("audio-apps", () => audioBackend().listApps())
+
+  ipcMain.handle("update-state", () => updates.currentUpdateState())
+  ipcMain.handle("update-check", () => updates.checkNow())
+  ipcMain.handle("update-install", () => updates.installNow())
+
+  // Whoever cannot get in — the address moved, the password changed — is
+  // exactly who most needs the new version, so the banner this feeds sits
+  // outside the logged-in area.
+  updates.onUpdateState((next) => window?.webContents.send("update-state", next))
+  updates.start()
 
   // Returns the source ids the PCM will arrive under. The renderer builds one
   // worklet per id and drops, in silence, any chunk whose id has no worklet —

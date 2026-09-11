@@ -1,0 +1,5 @@
+# The installers themselves are built artifacts, ~100 MB each, and are copied
+# here by hand on release. Only this file is tracked, so the directory exists
+# on a fresh clone and the server has something to serve.
+*
+!.gitignore

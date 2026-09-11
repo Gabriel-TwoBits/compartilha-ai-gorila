@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { currentNickname } from "./api"
 import { LoginScreen } from "./components/LoginScreen"
+import { UpdateBanner } from "./components/UpdateBanner"
 import { RoomScreen } from "./components/RoomScreen"
 
 type Session = { status: "checking" } | { status: "out" } | { status: "in"; nickname: string }
@@ -23,6 +24,17 @@ export function App() {
     }
   }, [])
 
+  // The banner sits outside the switch on purpose: whoever cannot get in is
+  // exactly who most needs the new version.
+  return (
+    <div className="flex h-full flex-col">
+      <UpdateBanner />
+      <div className="min-h-0 flex-1">{screen(session, setSession)}</div>
+    </div>
+  )
+}
+
+function screen(session: Session, setSession: (next: Session) => void) {
   switch (session.status) {
     case "checking":
       return <div className="flex h-full items-center justify-center text-ink-muted">…</div>

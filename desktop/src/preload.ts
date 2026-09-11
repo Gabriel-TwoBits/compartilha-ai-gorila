@@ -48,6 +48,22 @@ contextBridge.exposeInMainWorld("gorila", {
   /** Applies a mode and answers with the source ids the PCM will carry. */
   setAudioMode: (mode: unknown) => ipcRenderer.invoke("audio-mode", mode),
 
+  /** What the app knows about updating itself, right now. */
+  updateState: () => ipcRenderer.invoke("update-state"),
+
+  /** Looks for a new version now, whatever the schedule says. */
+  checkUpdate: () => ipcRenderer.invoke("update-check"),
+
+  /** Restarts into the version already downloaded. */
+  installUpdate: () => ipcRenderer.invoke("update-install"),
+
+  /** Subscribes to update progress. Returns the unsubscribe. */
+  onUpdateState: (listener: (state: unknown) => void) => {
+    const forward = (_event: unknown, state: unknown) => listener(state)
+    ipcRenderer.on("update-state", forward)
+    return () => ipcRenderer.off("update-state", forward)
+  },
+
   /** Subscribes to the PCM. Returns the unsubscribe. */
   onAudioPcm: (listener: (sourceId: string, pcm: Uint8Array) => void) => {
     const forward = (_event: unknown, sourceId: string, pcm: Uint8Array) =>

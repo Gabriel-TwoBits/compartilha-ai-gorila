@@ -110,15 +110,27 @@ environment, and `server/env.ts` refuses to boot with anything missing.
 
 ## Bandwidth
 
-Capture is capped at **720p, 30fps** and the encoder at **2.5 Mbps**
-(`client/src/tracks.ts`). A resolution ceiling alone does not cap bitrate — a
-busy screen blows through whatever the encoder feels like — so `maxBitrate` is
-the number that actually keeps the bill down.
+Cloudflare charges only for traffic going **out** to clients, so what you send
+is free and what everyone else receives is not: a broadcast costs its bitrate
+multiplied by the size of the audience, against a free 1,000 GB/month.
 
-Cloudflare only charges for traffic going out to clients; what you **send** is
-free. At 2.5 Mbps that works out to ~1.1 GB/h **per viewer**: against the free
-quota of 1,000 GB/month, roughly 900 viewer-hours, or ~225 h/month with four
-people watching.
+That is why the list of presets in `client/src/quality.ts` is short and stops
+where it does:
+
+| preset | bitrate | ~GB/h per viewer | four watching |
+|---|---|---|---|
+| 720p30 (default) | 2.5 Mbps | 1.1 | ~225 h/month |
+| 720p60 | 4.5 Mbps | 2.0 | ~125 h/month |
+| 1080p30 | 5.0 Mbps | 2.2 | ~112 h/month |
+
+1080p60 (9 Mbps) and 1440p60 (16 Mbps) are not offered at all — the second would
+spend the month's quota over a couple of weekends. A test pins the ceiling, so
+adding one is a deliberate act rather than an oversight.
+
+A resolution ceiling alone does not cap the bitrate: a busy screen blows through
+whatever the encoder feels like. `maxBitrate` is the number that bounds the
+bill, and the picker shows the GB/h beside each option so the choice is made
+knowing that.
 
 ---
 
@@ -164,6 +176,9 @@ you also load `module-loopback`.
 Chromium also hides an experimental loopback behind
 `chrome://flags/#pulseaudio-loopback-for-screen-share`, which is worth a try
 before reaching for any of the above.
+
+All of that is the browser's story. **The desktop app answers this properly**,
+capturing one application at a time — see below.
 
 ---
 
@@ -255,6 +270,47 @@ Set it up before handing the link out rather than after. This failure lands on
 the viewer's network, not on yours, and from here it is indistinguishable from
 "it just doesn't work".
 
+## The desktop app
+
+`desktop/` is an Electron shell around this same client: the window loads the
+room's own URL, so the whole interface is reused rather than rebuilt. What it
+adds is the two things a browser cannot do — list the screens itself, and
+capture audio **one application at a time**, which is what keeps the Discord
+call out of a broadcast.
+
+```sh
+cd desktop
+npm install
+npm start          # builds the bundles and opens the app
+npm run dist       # AppImage and .deb into dist-app/
+npm run dist:win   # NSIS installer; needs Wine on Linux
+```
+
+Point it somewhere else with `GORILA_URL=http://localhost:8787 npm start`.
+
+Per-application audio is PipeWire on Linux and a WASAPI addon on Windows. Both
+hand over the same 16-bit stereo PCM at 48 kHz, so the mixing worklet in the
+client is shared. The Windows half was written without a Windows machine to try
+it on: its pure logic is covered by tests, the rest is waiting for a real one.
+
+### Cutting a release
+
+1. Raise `version` in `desktop/package.json` — the number is what decides
+   whether an installed copy considers itself out of date.
+2. `npm run dist` (and `npm run dist:win`, which needs Wine).
+3. Copy from `desktop/dist-app/` into `release/`: the versioned artifacts, their
+   `.blockmap` where one exists, and the `latest*.yml` feed. Windows and Linux
+   have separate feeds, so one can be published without touching the other.
+4. Copy each installer again under a name with no version in it
+   (`CompartilhaAiGorila.AppImage`, `CompartilhaAiGorila.deb`,
+   `CompartilhaAiGorila-instalador.exe`). Those are what the download buttons
+   point at, so a link handed out once keeps working. An app already installed
+   never uses them — the updater follows the feed to the versioned file.
+
+**The `.blockmap` has to go up too.** Without it there is no differential
+download and every update pulls the whole ~100 MB again, which is exactly what
+should not be crossing the tunnel.
+
 ## Known limitations
 
 - **Screen audio** depends on the browser and the operating system, and on Linux
@@ -279,11 +335,17 @@ the viewer's network, not on yours, and from here it is indistinguishable from
 | `server/signaling.ts` | WebSocket: presence and track addresses |
 | `server/main.ts` | HTTP routes and boot |
 | `client/src/useBroadcast.ts` | Publishes the screen to the SFU and announces it to the room |
-| `client/src/tracks.ts` | PartyTracks singletons and the 720p30 / 2.5 Mbps ceilings |
+| `client/src/tracks.ts` | PartyTracks singletons, and which screen source is in use |
+| `client/src/quality.ts` | The preset table, and what each one costs per viewer |
 | `client/src/audioSource.ts` | Which audio source the broadcast uses, and its capture |
 | `client/src/components/Stage.tsx` | Main panel: local preview or remote track |
 | `scripts/share.ts` | Build, server and quick tunnel in one command (`pnpm share`) |
 | `scripts/gorila.service` | systemd user unit that keeps the server up across reboots |
+| `desktop/src/main.ts` | The app's window, IPC and lifecycle |
+| `desktop/src/pipewireGraph.ts` | Reading the PipeWire graph and deciding what to wire |
+| `desktop/src/windowsProcesses.ts` | Which Windows processes may reach the broadcast |
+| `client/src/processAudio.ts` | Captured PCM into one WebRTC audio track |
+| `INSTALAR.md` | The install guide to hand to friends, in plain pt-BR |
 
 ```sh
 pnpm test        # vitest

@@ -1,2 +1,8 @@
 node_modules/
+
+# esbuild's output, rebuilt by `npm run build`.
 dist/
+
+# electron-builder's output: installers of ~100 MB each, rebuilt by
+# `npm run dist`. A release copies the ones it wants into ../release/.
+dist-app/

@@ -1,0 +1,64 @@
+appId: com.gorila.tela
+productName: CompartilhaAiGorila
+copyright: CompartilhaAiGorila
+
+directories:
+  output: dist-app
+  buildResources: build
+
+# Only the bundles and the icon. The interface is not here at all — the window
+# loads the room's own URL — so nothing of the client is packaged.
+files:
+  - dist/**/*
+  - package.json
+
+# The native audio addon cannot live inside the asar: a .node only loads from a
+# real file on disk. `audioWasapi.ts` rewrites `app.asar` to `app.asar.unpacked`
+# in the path it builds for exactly this reason.
+asarUnpack:
+  - "**/node_modules/loopback-capture/**"
+
+# Where the app looks for a new version. The room's own server serves these as
+# static files under /atualiza/; see `server/main.ts`.
+#
+# GitHub Releases would work too, but it would mean keeping a mirror of a
+# Codeberg repository just to hold three files.
+publish:
+  provider: generic
+  url: https://example.invalid/atualiza/
+
+win:
+  target:
+    - nsis
+  icon: build/icon.png
+  # Unsigned: a code-signing certificate is not worth it for a handful of
+  # friends, so SmartScreen warns on first run. INSTALAR.md says what to click.
+
+nsis:
+  # Installs under the user's own AppData, asking for no administrator
+  # password — which is what avoids most of the "it wouldn't install" messages.
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: CompartilhaAiGorila
+  artifactName: CompartilhaAiGorila-${version}-instalador.${ext}
+
+linux:
+  target:
+    # AppImage is the one electron-updater knows how to update on its own. But
+    # it needs libfuse2, which Debian 13 and Ubuntu 22.04+ no longer install —
+    # and without it a double click does nothing at all and reports nothing.
+    # The .deb covers that case, at the price of not updating itself.
+    - AppImage
+    - deb
+  icon: build/icon.png
+  category: AudioVideo
+  synopsis: Transmita a tela sem mandar o áudio da call junto
+  # The .deb wants a maintainer with an address. The desktop file name lives in
+  # package.json (`desktopName`); putting it here is a schema error, and without
+  # it the task bar shows a generic square instead of the gorilla.
+  maintainer: CompartilhaAiGorila <gorila@localhost>
+  syncDesktopName: true
+  artifactName: CompartilhaAiGorila-${version}.${ext}

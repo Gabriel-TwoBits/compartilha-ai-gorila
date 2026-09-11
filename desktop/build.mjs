@@ -7,6 +7,11 @@
  * class of problem, and nothing here needs ESM.
  *
  * `electron` stays external — it is resolved from the runtime, not bundled.
+ * So does `electron-updater`, a CommonJS package whose exports change shape
+ * when bundled: the packaged app died on start with `autoUpdater` undefined.
+ * So does the audio addon: `audioWasapi.ts` resolves it by path at run time, and
+ * bundling it would break the `app.asar.unpacked` rewrite that finds the `.node`
+ * inside a packaged app.
  */
 
 import { copyFile, mkdir } from "node:fs/promises"
@@ -17,7 +22,7 @@ const shared = {
   platform: "node",
   format: "cjs",
   target: "node22",
-  external: ["electron"],
+  external: ["electron", "electron-updater", "loopback-capture"],
   sourcemap: true,
 }
 
