@@ -101,10 +101,12 @@ async function waitForRoom() {
   return null
 }
 
-const appImage = await findAppImage()
 const workDir = await mkdtemp(join(tmpdir(), "gorila-smoke-"))
 
 try {
+  // Inside the block, so a missing build is reported the way every other
+  // failure here is rather than as a bare stack trace.
+  const appImage = await findAppImage()
   process.stdout.write(`abrindo ${appImage}\n`)
   await run(appImage, ["--appimage-extract"], { cwd: workDir, stdio: "ignore" })
 
