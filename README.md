@@ -299,8 +299,30 @@ cd desktop
 npm install
 npm start          # builds the bundles and opens the app
 npm run dist       # AppImage and .deb into dist-app/
-npm run dist:win   # NSIS installer; needs Wine on Linux
+npm run dist:win   # NSIS installer — needs Wine, see below
 ```
+
+**The Windows installer needs Wine**, and there is no way around it: NSIS is the
+only Windows target `electron-updater` can update in place, and the packager
+shells out to `signtool.exe` while building it. Turning off
+`signAndEditExecutable` skips that step for the app's own executable but not for
+NSIS itself.
+
+Rather than putting Wine on the machine, build in the image that already has it:
+
+```sh
+cd desktop
+docker run --rm \
+  -v "$PWD":/project \
+  -v "$HOME/.cache/electron":/root/.cache/electron \
+  -v "$HOME/.cache/electron-builder":/root/.cache/electron-builder \
+  -w /project electronuserland/builder:wine \
+  /bin/bash -c "npm run dist:win"
+```
+
+The image is ~4.7 GB once, the two cache mounts stop it re-downloading Electron
+every run, and nothing lands on the host. Under rootless Docker or podman the
+artifacts come out owned by you.
 
 Point it somewhere else with `GORILA_URL=http://localhost:8787 npm start`.
 
