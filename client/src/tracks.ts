@@ -16,17 +16,35 @@ if (import.meta.env.DEV) setLogLevel("debug")
  * Lazily created singletons.
  *
  * `PartyTracks` opens a peer connection against `/partytracks/*`, which requires
- * a session, so it must not be constructed before login. Keeping one instance
- * also means React's double render in StrictMode cannot end up with two peer
- * connections or two screen capture prompts.
+ * a session, so it must not be constructed before login. Reusing the same
+ * instance also means React's double render in StrictMode cannot end up with
+ * two peer connections for one role, or two screen capture prompts.
  */
 
-let partyTracks: PartyTracks | null = null
+let broadcastTracks: PartyTracks | null = null
+let watchTracks: PartyTracks | null = null
 let screenshare: Screenshare | null = null
 
-export function getPartyTracks(): PartyTracks {
-  partyTracks ??= new PartyTracks()
-  return partyTracks
+/**
+ * Two instances, so publishing and watching never share a peer connection.
+ *
+ * One `PartyTracks` is one SFU session over one `RTCPeerConnection`, and every
+ * push or pull renegotiates it. Sharing the connection makes those two paths
+ * collide: opening a broadcast while already publishing pulls the track and
+ * closes it again in the same breath, leaving the tile black over a track that
+ * has already ended.
+ *
+ * Neither instance touches the network until something subscribes, so the one
+ * nobody is using costs nothing.
+ */
+export function getBroadcastTracks(): PartyTracks {
+  broadcastTracks ??= new PartyTracks()
+  return broadcastTracks
+}
+
+export function getWatchTracks(): PartyTracks {
+  watchTracks ??= new PartyTracks()
+  return watchTracks
 }
 
 /**

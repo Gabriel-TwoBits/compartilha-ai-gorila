@@ -12,7 +12,7 @@ import { type TrackMetadata, createAudioSink } from "partytracks/client"
 import { useObservable } from "partytracks/react"
 import { type Observable, of } from "rxjs"
 import type { Broadcast, Participant } from "@shared/protocol"
-import { getPartyTracks, getScreenshareSource } from "../tracks"
+import { getScreenshareSource, getWatchTracks } from "../tracks"
 
 const DEFAULT_VOLUME = 1
 const VOLUME_STEP = 0.05
@@ -65,7 +65,7 @@ function LocalPreview() {
 }
 
 function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
-  const partyTracks = getPartyTracks()
+  const partyTracks = getWatchTracks()
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const [audioBlocked, setAudioBlocked] = useState(false)

@@ -5,7 +5,7 @@ import type { ClientMessage } from "@shared/protocol"
 import { audioSourceId$, audioSourceTrack$ } from "./audioSource"
 import {
   applyQualityToTrack,
-  getPartyTracks,
+  getBroadcastTracks,
   getScreenshareSource,
   hintMotion,
   toTrackRef,
@@ -74,7 +74,7 @@ export type Broadcasting = {
  * pure waste.
  */
 export function useBroadcast(signaling: Signaling): Broadcasting {
-  const partyTracks = getPartyTracks()
+  const partyTracks = getBroadcastTracks()
   const screenshare = getScreenshareSource()
   const { send, connected } = signaling
 

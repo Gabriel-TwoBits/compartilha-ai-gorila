@@ -54,6 +54,13 @@ The heavy WebRTC lifting (SDP, renegotiation, recovering from a dropped
 connection) belongs to [`partytracks`](https://www.npmjs.com/package/partytracks),
 a library maintained by Cloudflare.
 
+**Publishing and watching run on separate SFU sessions.** One `PartyTracks`
+instance is one session over one peer connection, and every track pushed or
+pulled renegotiates it. Sharing a connection between the two makes them collide:
+opening a broadcast while already publishing pulls the track and closes it again
+in the same breath, and the tile goes black over a track that has ended. Two
+instances cost two idle sessions and no extra egress.
+
 ---
 
 ## Running locally
@@ -436,7 +443,7 @@ out of their own app.
 | `server/signaling.ts` | WebSocket: presence and track addresses |
 | `server/main.ts` | HTTP routes and boot |
 | `client/src/useBroadcast.ts` | Publishes the screen to the SFU and announces it to the room |
-| `client/src/tracks.ts` | PartyTracks singletons, and which screen source is in use |
+| `client/src/tracks.ts` | The two PartyTracks sessions, and which screen source is in use |
 | `client/src/quality.ts` | The preset table, and what each one costs per viewer |
 | `client/src/audioSource.ts` | Which audio source the broadcast uses, and its capture |
 | `client/src/components/Stage.tsx` | Main panel: local preview or remote track |
