@@ -221,6 +221,22 @@ tailscale funnel status           # prints the public URL
 comes back on its own after a reboot. There is no service of ours to install for
 this half.
 
+**Then wait an hour before believing anything.** The public DNS records are
+published by Tailscale, the documentation says "up to 10 minutes", and measured
+here it took **an hour** — with the AAAA record arriving some forty minutes
+before the A. Until the A lands the address is unreachable from any network
+without IPv6, which looks exactly like a broken setup. Renaming the node or
+toggling Funnel restarts that clock, so the one thing not to do while waiting is
+fiddle.
+
+Testing it from inside the tailnet needs a nudge, because MagicDNS answers with
+the internal address and never touches the public path:
+
+```sh
+curl --resolve <machine>.<tailnet>.ts.net:443:<public A record> \
+  https://<machine>.<tailnet>.ts.net/
+```
+
 **4. Keep the server up.** `scripts/gorila.service` is a user unit — nothing here
 needs root:
 
