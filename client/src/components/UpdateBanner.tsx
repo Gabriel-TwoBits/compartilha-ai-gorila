@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { type UpdateState, desktopBridge } from "../desktop"
+import { RestartIcon } from "./Icons"
 
 /**
  * Offers the version already downloaded, inside the app.
@@ -47,8 +48,9 @@ export function UpdateBanner() {
       <button
         type="button"
         onClick={() => desktopBridge()?.installUpdate()}
-        className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink transition hover:brightness-110"
+        className="flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink transition hover:brightness-110"
       >
+        <RestartIcon />
         Reiniciar e atualizar
       </button>
     </div>

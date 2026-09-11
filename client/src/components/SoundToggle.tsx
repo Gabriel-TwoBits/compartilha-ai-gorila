@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { playRoomSound, setSoundVolume, soundsEnabled } from "../sounds"
+import { BellIcon, BellOffIcon } from "./Icons"
 
 /** Restored when unmuting, so turning sound back on returns it to where it was. */
 const DEFAULT_ON_VOLUME = 0.35
@@ -30,10 +31,11 @@ export function SoundToggle() {
       type="button"
       onClick={toggle}
       aria-pressed={enabled}
+      aria-label={enabled ? "Desligar os avisos sonoros" : "Ligar os avisos sonoros"}
       title={enabled ? "Desligar os avisos sonoros" : "Ligar os avisos sonoros"}
       className={buttonClassName}
     >
-      {enabled ? "🔔" : "🔕"}
+      {enabled ? <BellIcon /> : <BellOffIcon />}
     </button>
   )
 }

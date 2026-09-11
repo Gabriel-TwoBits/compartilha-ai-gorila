@@ -6,6 +6,7 @@ import {
   revealAudioInputs,
   selectAudioSource,
 } from "../audioSource"
+import { SpeakerIcon } from "./Icons"
 
 /** `<option>` values are strings, so the screen capture needs one of its own. */
 const SCREEN_AUDIO = ""
@@ -48,7 +49,7 @@ export function AudioSource() {
   return (
     <div className="flex items-center gap-2">
       <label className="flex items-center gap-2 text-xs text-ink-muted">
-        🔈
+        <SpeakerIcon />
         <select
           value={selected ?? SCREEN_AUDIO}
           onChange={handleChange}

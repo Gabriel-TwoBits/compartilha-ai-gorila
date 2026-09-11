@@ -8,6 +8,7 @@ import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
 import { AudioModes } from "./AudioModes"
 import { Download, hasDownload } from "./Download"
+import { DownloadIcon, ScreenIcon, SpeakerIcon, StopIcon } from "./Icons"
 import { AudioSource } from "./AudioSource"
 import { LevelMeter } from "./LevelMeter"
 import { Participants } from "./Participants"
@@ -23,7 +24,7 @@ type Props = {
 
 /** Shared by the two toggles that open a panel above the footer. */
 const panelButtonClassName =
-  "rounded-md border border-edge bg-surface-raised px-2 py-1.5 text-xs text-ink transition hover:brightness-110"
+  "flex items-center gap-1.5 rounded-md border border-edge bg-surface-raised px-2 py-1.5 text-xs text-ink transition hover:brightness-110"
 
 function statusLine(connected: boolean, broadcasterCount: number): string {
   if (!connected) return "reconectando…"
@@ -201,7 +202,8 @@ export function RoomScreen({ nickname, onLogout }: Props) {
               aria-expanded={panel === "audio"}
               className={panelButtonClassName}
             >
-              🔈 Áudio
+              <SpeakerIcon />
+              Áudio
             </button>
           )}
 
@@ -214,7 +216,8 @@ export function RoomScreen({ nickname, onLogout }: Props) {
               aria-expanded={panel === "download"}
               className={panelButtonClassName}
             >
-              ⬇ Baixar o app
+              <DownloadIcon />
+              Baixar o app
             </button>
           )}
 
@@ -222,11 +225,13 @@ export function RoomScreen({ nickname, onLogout }: Props) {
             type="button"
             onClick={handleBroadcastClick}
             className={[
-              "rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:brightness-110",
+              "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition",
+              "hover:brightness-110",
               broadcast.isBroadcasting ? "bg-red-500 text-white" : "bg-accent text-accent-ink",
             ].join(" ")}
           >
-            {broadcast.isBroadcasting ? "⏹ Parar transmissão" : "🖥 Transmitir minha tela"}
+            {broadcast.isBroadcasting ? <StopIcon /> : <ScreenIcon />}
+            {broadcast.isBroadcasting ? "Parar transmissão" : "Transmitir minha tela"}
           </button>
         </div>
       </footer>
