@@ -36,11 +36,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Parsed by hand rather than with `URL`: the `stun:` and `turn:` schemes are
  * not special-cased by it, so the port lands in the pathname and there is
  * nothing to read `port` from.
+ *
+ * The query has to come off first. A TURN URL carries one —
+ * `turn:host:3478?transport=udp` — and reading the last colon-separated piece
+ * whole yields `3478?transport=udp`, which is not a number, so every TURN URL
+ * would pass unexamined. Including one on port 53, which is the case this
+ * module exists for.
  */
 function isUsableUrl(url: unknown): boolean {
   if (typeof url !== "string") return false
 
-  const port = Number(url.split(":").pop())
+  const withoutQuery = url.split("?")[0] ?? url
+  const port = Number(withoutQuery.split(":").pop())
   if (!Number.isInteger(port)) return true
 
   return !UNUSABLE_PORTS.includes(port)

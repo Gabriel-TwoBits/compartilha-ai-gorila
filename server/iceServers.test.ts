@@ -53,6 +53,40 @@ describe("pruneIceServers", () => {
     expect(pruneIceServers({ iceServers: [{ urls }] })).toEqual({ iceServers: [{ urls }] })
   })
 
+  /**
+   * A TURN URL carries a query, and reading the last colon-separated piece
+   * whole yields `53?transport=udp` — not a number, so the check would pass it
+   * through. That is exactly the URL this module exists to remove.
+   */
+  it("reads the port past the query, so a turn url on 53 is still dropped", () => {
+    const answer = {
+      iceServers: [
+        {
+          urls: [
+            "turn:turn.cloudflare.com:3478?transport=udp",
+            "turn:turn.cloudflare.com:53?transport=udp",
+            "turns:turn.cloudflare.com:5349?transport=tcp",
+          ],
+          username: "quem",
+          credential: "segredo",
+        },
+      ],
+    }
+
+    expect(pruneIceServers(answer)).toEqual({
+      iceServers: [
+        {
+          urls: [
+            "turn:turn.cloudflare.com:3478?transport=udp",
+            "turns:turn.cloudflare.com:5349?transport=tcp",
+          ],
+          username: "quem",
+          credential: "segredo",
+        },
+      ],
+    })
+  })
+
   // A shape we do not recognise has to pass through: this sits in front of a
   // response the browser is about to act on, and turning it into an empty list
   // would break connections that were working.
