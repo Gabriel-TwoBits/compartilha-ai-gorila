@@ -5,6 +5,7 @@ import { deleteCookie, setCookie } from "hono/cookie"
 import { routePartyTracksRequest } from "partytracks/server"
 import { normalizeNickname } from "@shared/protocol"
 import { env } from "./env"
+import { pruneIceServers } from "./iceServers"
 import { type AppEnv, requireSession } from "./middleware"
 import { SESSION_COOKIE_NAME, checkPassword, sessionCookieOptions, signSession } from "./session"
 import { signalingRoute, startHeartbeat, webSocketServer } from "./signaling"
@@ -118,6 +119,40 @@ function withDecodedBodyHeaders(response: Response): Response {
   })
 }
 
+/** The only SFU route whose body this server rewrites. See `iceServers.ts`. */
+const ICE_SERVERS_PATH = "/partytracks/generate-ice-servers"
+
+/**
+ * Removes the ICE servers the browser cannot use from a proxied answer.
+ *
+ * A single STUN URL that never answers stops the whole gathering rather than
+ * being skipped, so one unusable entry costs every candidate — and every
+ * broadcast with it. A body that cannot be parsed is relayed untouched: it is
+ * about to be handed to the browser, and a guess would be worse than the
+ * original.
+ */
+async function withUsableIceServers(response: Response): Promise<Response> {
+  if (!response.ok) return response
+
+  const original = await response.clone().text()
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(original)
+  } catch {
+    return response
+  }
+
+  const headers = new Headers(response.headers)
+  headers.delete("Content-Length")
+
+  return new Response(JSON.stringify(pruneIceServers(parsed)), {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  })
+}
+
 /**
  * Proxy to the Cloudflare Realtime SFU. This exists so `SFU_APP_TOKEN` stays on
  * the server, and it sits behind the session for the same reason.
@@ -139,7 +174,10 @@ app.all("/partytracks/*", requireSession, async (c) => {
   })
 
   if (!response.ok) await logUpstreamFailure(c.req.path, response)
-  return withDecodedBodyHeaders(response)
+
+  const decoded = withDecodedBodyHeaders(response)
+  if (c.req.path === ICE_SERVERS_PATH) return withUsableIceServers(decoded)
+  return decoded
 })
 
 app.get("/ws", requireSession, signalingRoute)
