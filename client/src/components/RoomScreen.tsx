@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
 import type { Participant } from "@shared/protocol"
 import { logout } from "../api"
-import { useBroadcast } from "../useBroadcast"
+import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
 import { useSignaling } from "../useSignaling"
 import { AudioSource } from "./AudioSource"
 import { Participants } from "./Participants"
+import { Quality } from "./Quality"
 import { Stage } from "./Stage"
 
 type Props = {
@@ -17,6 +18,27 @@ function statusLine(connected: boolean, broadcasterCount: number): string {
   if (broadcasterCount === 0) return "aguardando alguém transmitir"
   if (broadcasterCount === 1) return "1 transmissão no ar"
   return `${broadcasterCount} transmissões no ar`
+}
+
+/**
+ * What the footer says, in priority order: a failure, then our own broadcast
+ * still assembling, then the room at large.
+ *
+ * The middle case exists because the handshake takes seconds a person cannot
+ * account for. Without it the only sign anything is happening is the button
+ * label, which says the same thing whether the SFU is slow or the whole attempt
+ * has died.
+ */
+function footerLine(
+  broadcast: Broadcasting,
+  connected: boolean,
+  broadcasterCount: number,
+): string {
+  if (broadcast.error !== null) return broadcast.error
+  if (broadcast.isBroadcasting && broadcast.step !== "live") {
+    return `${describeStep(broadcast.step)}…`
+  }
+  return statusLine(connected, broadcasterCount)
 }
 
 export function RoomScreen({ nickname, onLogout }: Props) {
@@ -99,10 +121,11 @@ export function RoomScreen({ nickname, onLogout }: Props) {
 
       <footer className="flex items-center justify-between gap-4 px-4 py-3">
         <p className="font-mono text-xs text-ink-muted">
-          {broadcast.error ?? statusLine(signaling.connected, broadcasters.length)}
+          {footerLine(broadcast, signaling.connected, broadcasters.length)}
         </p>
 
         <div className="flex items-center gap-3">
+          <Quality />
           <AudioSource />
 
           <button

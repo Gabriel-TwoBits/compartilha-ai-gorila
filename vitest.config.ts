@@ -8,7 +8,10 @@ export default defineConfig({
     },
   },
   test: {
-    include: ["server/**/*.test.ts", "shared/**/*.test.ts"],
+    // Client tests cover the pure logic only — a preset table, a diff between
+    // two room snapshots — so they need no DOM and run in the same node
+    // environment as the rest.
+    include: ["server/**/*.test.ts", "shared/**/*.test.ts", "client/**/*.test.ts"],
     // server/env.ts refuses to load without these, by design.
     env: {
       SFU_APP_ID: "test-app-id",
