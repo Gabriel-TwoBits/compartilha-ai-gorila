@@ -15,7 +15,7 @@
  */
 
 import { spawn } from "node:child_process"
-import { mkdtemp, readdir, rm } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
@@ -35,15 +35,29 @@ function fail(message) {
   process.exitCode = 1
 }
 
-/** Absolute, because the extraction runs with a temporary directory as its cwd. */
+/**
+ * The build about to be released, picked by version rather than by whatever
+ * turns up first.
+ *
+ * Artifacts of every version that was ever built pile up in `dist-app/`, and
+ * taking any `.AppImage` from there means the check can pass on a release that
+ * was cut months ago while the one being published was never opened — the exact
+ * failure this script exists to catch, reported as a success.
+ *
+ * Absolute, because the extraction runs with a temporary directory as its cwd.
+ */
 async function findAppImage() {
   const fromArgument = process.argv[2]
   if (fromArgument !== undefined) return resolve(fromArgument)
 
+  const { version } = JSON.parse(await readFile("package.json", "utf8"))
   const entries = await readdir(ARTIFACT_DIR).catch(() => [])
-  const appImage = entries.find((entry) => entry.endsWith(".AppImage"))
+  const appImage = entries.find((entry) => entry.endsWith(`-${version}.AppImage`))
   if (appImage === undefined) {
-    throw new Error(`no .AppImage in ${ARTIFACT_DIR}/ — run \`npm run dist\` first`)
+    throw new Error(
+      `no ${version} .AppImage in ${ARTIFACT_DIR}/ — run \`npm run dist\` first. ` +
+        `Another version sitting there is not a substitute.`,
+    )
   }
   return resolve(ARTIFACT_DIR, appImage)
 }
