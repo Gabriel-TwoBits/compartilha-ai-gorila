@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { currentAudioMode, selectAudioMode } from "../audioMode"
 import { type AudioApp, type AudioMode, desktopBridge } from "../desktop"
 import { PROCESS_AUDIO_SOURCE, selectAudioSource } from "../audioSource"
 import { applyAudioMode } from "../processAudio"
@@ -28,7 +29,7 @@ const MODE_HINTS: Record<ModeKind, string> = {
   none: "Só imagem.",
 }
 
-const MODE_ORDER: ModeKind[] = ["include", "everything", "system", "none"]
+const MODE_ORDER: ModeKind[] = ["everything", "include", "system", "none"]
 
 const optionClassName = "flex w-full items-start gap-2 rounded-lg border p-3 text-left transition"
 const chosenClassName = "border-accent bg-surface-raised"
@@ -42,12 +43,17 @@ const idleClassName = "border-edge hover:bg-surface-raised"
  * the room hears itself with a delay.
  */
 export function AudioModes() {
-  const [kind, setKind] = useState<ModeKind>("include")
-  const [pids, setPids] = useState<number[]>([])
+  // Seeded from the shared default rather than from a literal here: a
+  // broadcast started without ever opening this panel is already wired, and the
+  // panel has to show what is actually on air.
+  const initial = currentAudioMode()
+  const [kind, setKind] = useState<ModeKind>(initial.kind)
+  const [pids, setPids] = useState<number[]>(initial.kind === "include" ? initial.pids : [])
   const [apps, setApps] = useState<AudioApp[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const apply = useCallback((mode: AudioMode) => {
+    selectAudioMode(mode)
     // Choosing any mode here also makes the mix the broadcast's audio source:
     // picking applications and then not hearing them would be a trap.
     selectAudioSource(mode.kind === "none" ? null : PROCESS_AUDIO_SOURCE)

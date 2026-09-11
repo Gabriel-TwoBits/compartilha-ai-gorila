@@ -12,6 +12,7 @@ import {
   shareReplay,
   switchMap,
 } from "rxjs"
+import { isDesktop } from "./desktop"
 import { processAudioTrack$ } from "./processAudio"
 
 /**
@@ -35,7 +36,14 @@ export type AudioSourceId = string | null
  */
 export const PROCESS_AUDIO_SOURCE = "process-audio"
 
-const selectedAudioSource = new BehaviorSubject<AudioSourceId>(null)
+/**
+ * Inside the app the screen capture carries no sound of its own, so the
+ * browser's default would mean silence. The per-application mix is what the
+ * app is for, and it is the default there.
+ */
+const selectedAudioSource = new BehaviorSubject<AudioSourceId>(
+  isDesktop() ? PROCESS_AUDIO_SOURCE : null,
+)
 
 export const audioSourceId$: Observable<AudioSourceId> = selectedAudioSource.asObservable()
 

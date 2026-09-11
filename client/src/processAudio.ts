@@ -1,4 +1,5 @@
 import { Observable } from "rxjs"
+import { currentAudioMode } from "./audioMode"
 import { type AudioMode, desktopBridge } from "./desktop"
 
 /**
@@ -169,7 +170,11 @@ export async function applyAudioMode(mode: AudioMode): Promise<void> {
 export const processAudioTrack$ = new Observable<MediaStreamTrack>((subscriber) => {
   let cancelled = false
 
-  getMixer()
+  // Starting a broadcast wires the audio too. Without this the default mode is
+  // only a label in the panel: the room goes out silent until somebody thinks
+  // to open it, and the first sign is a friend saying they hear nothing.
+  applyAudioMode(currentAudioMode())
+    .then(() => getMixer())
     .then((ready) => {
       if (cancelled) return
       subscriber.next(ready.track)
