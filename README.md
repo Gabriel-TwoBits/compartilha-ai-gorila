@@ -132,6 +132,12 @@ whatever the encoder feels like. `maxBitrate` is the number that bounds the
 bill, and the picker shows the GB/h beside each option so the choice is made
 knowing that.
 
+**TURN spends the same allowance.** It is a separate product but not a separate
+quota, and a viewer who falls back to a relay costs roughly double: their video
+crosses the relay as well as the SFU. That only happens to whoever cannot reach
+the SFU directly, and for them the alternative is a black screen — but it is
+worth knowing which number it comes out of.
+
 ---
 
 ## Audio
@@ -285,6 +291,16 @@ environment only at boot. The address does not change.
 Set it up before handing the link out rather than after. This failure lands on
 the viewer's network, not on yours, and from here it is indistinguishable from
 "it just doesn't work".
+
+To check it took, log in and fetch `/partytracks/generate-ice-servers`: with
+TURN configured the answer carries `turn:` and `turns:` URLs alongside the STUN
+one, with a short-lived username and credential. The pair on ports 80 and 443 is
+the one that matters most — it is what gets through a network that only allows
+what looks like web traffic.
+
+Enabling TURN also changes the STUN entry Cloudflare offers, dropping the port 53
+URL that `server/iceServers.ts` exists to remove. That module stays as a guard
+rather than a load-bearing part.
 
 ## The desktop app
 
