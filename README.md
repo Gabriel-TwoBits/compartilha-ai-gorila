@@ -256,6 +256,32 @@ loginctl enable-linger              # survives closing the terminal
 Then stop the machine from sleeping. A suspended host takes the Funnel down with
 it, and the address answers nothing until it wakes.
 
+### If a second VPN shares the machine
+
+Tailscale and Cloudflare WARP do not coexist. While WARP is up it replaces this
+machine's network identity, Tailscale announces endpoints that belong to WARP,
+and the Funnel relay can no longer reach here — the room is unreachable from
+outside while looking perfectly healthy from in here, which is the worst way for
+something to break.
+
+Two things make that livable rather than ruinous, and both are measured:
+
+- **`tailscale set --accept-dns=false`.** With no `systemd-resolved` on the
+  machine, `/etc/resolv.conf` is a plain file that both clients overwrite and
+  then restore from their own stale copy. Losing that fight left the machine
+  with no DNS at all whenever WARP disconnected — a reboot to recover. Tailscale
+  stepping out of it makes WARP the sole owner. The cost is that MagicDNS no
+  longer resolves locally, which is fine: the Funnel hostname has public records.
+- **`scripts/tailscale-after-warp.service`.** Tailscale never notices WARP
+  tearing its interface down: it keeps announcing addresses that no longer exist
+  and the room stays down indefinitely. The watcher restarts `tailscaled` when
+  the interface disappears, and the room is back in about forty seconds. It is
+  event-driven (`ip monitor`), so it costs nothing while idle. Install with the
+  commands in the header of the unit file.
+
+Both are patches over two VPNs forced to share one machine. The real answer is
+for the room not to depend on this machine's network at all.
+
 Hand the URL out with the `ROOM_PASSWORD`, and ask for Chrome/Chromium (see
 "Known limitations"). Anyone holding the URL lands on the login screen, so the
 password stays the gate.
