@@ -2,10 +2,12 @@ import { useEffect, useState } from "react"
 import type { Participant } from "@shared/protocol"
 import { logout } from "../api"
 import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
+import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
 import { AudioSource } from "./AudioSource"
 import { Participants } from "./Participants"
 import { Quality } from "./Quality"
+import { SoundToggle } from "./SoundToggle"
 import { Stage } from "./Stage"
 
 type Props = {
@@ -44,6 +46,7 @@ function footerLine(
 export function RoomScreen({ nickname, onLogout }: Props) {
   const signaling = useSignaling()
   const broadcast = useBroadcast(signaling)
+  useRoomSounds(signaling.room)
 
   /** Whose broadcasts the viewer asked to open. Nothing is pulled until they do. */
   const [openedNicknames, setOpenedNicknames] = useState<string[]>([])
@@ -97,6 +100,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         </span>
 
         <div className="flex items-center gap-3">
+          <SoundToggle />
           <span className="text-sm text-ink-muted">{nickname}</span>
           <button
             type="button"
