@@ -36,6 +36,16 @@ const SPLASH_HEIGHT = 200
 const THUMBNAIL_WIDTH = 320
 const THUMBNAIL_HEIGHT = 180
 
+/**
+ * How long the audio teardown may hold the app open on its way out.
+ *
+ * `will-quit` cancels the quit and only lets go once the cleanup settles, so a
+ * command that never returns — `pactl` against a PipeWire that stopped
+ * answering — leaves a windowless process alive with no way to close it but
+ * `kill`. Leaving a null sink behind is the lesser fault.
+ */
+const SHUTDOWN_CLEANUP_MS = 2000
+
 /** Flags handed to the preload, which cannot read this process's variables. */
 const PORTAL_ARGUMENT = "--gorila-portal"
 const PER_PROCESS_AUDIO_ARGUMENT = "--gorila-per-process-audio"
@@ -335,9 +345,9 @@ app.whenReady().then(async () => {
 // person's machine that outlives the app.
 app.on("will-quit", (event) => {
   event.preventDefault()
-  void audioBackend()
-    .stop()
-    .finally(() => app.exit(0))
+  const cleanup = audioBackend().stop()
+  const ceiling = new Promise((resolve) => setTimeout(resolve, SHUTDOWN_CLEANUP_MS))
+  void Promise.race([cleanup.catch(() => undefined), ceiling]).finally(() => app.exit(0))
 })
 
 app.on("window-all-closed", () => {
