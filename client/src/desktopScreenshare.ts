@@ -1,4 +1,4 @@
-import { BehaviorSubject, EMPTY, Observable, Subject, shareReplay, switchMap } from "rxjs"
+import { BehaviorSubject, EMPTY, Observable, Subject, filter, shareReplay, switchMap } from "rxjs"
 import { type DesktopSource, desktopBridge } from "./desktop"
 import { captureConstraints, currentQuality } from "./quality"
 import type { ScreenSource } from "./screenSource"
@@ -169,6 +169,13 @@ const broadcastTrack$ = broadcasting.pipe(
   // One capture no matter how many subscribers: the local preview, the push to
   // the SFU and the hook that keeps the pipeline warm are three of them.
   shareReplay({ bufferSize: 1, refCount: true }),
+  // That replay outlives a broadcast — the warm subscriber never lets the count
+  // reach zero — so the next one would open on the previous capture, already
+  // stopped. Under the portal that is fatal rather than untidy: the real
+  // capture only arrives once the person has chosen, seconds later, by which
+  // time the session has been negotiated around a dead track and nothing
+  // replaces it. The broadcast then sits on "connecting" forever.
+  filter((track) => track.readyState === "live"),
 )
 
 /**
