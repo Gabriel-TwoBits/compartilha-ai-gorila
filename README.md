@@ -429,6 +429,12 @@ out of their own app.
   That is inherent to their SFU — see "Bandwidth" above.
 - **The room lives in memory.** Restarting the server empties it, and everyone
   reconnects on their own.
+- **A still window under Wayland sends almost nothing**, and looks exactly like a
+  broadcast that never started. The portal hands over a frame only when the
+  window itself changes: measured here, 1 frame in 4 seconds for a window
+  sitting idle against 119 for the same window animating. The whole screen never
+  shows this — a clock or the cursor is always moving somewhere on it. Nothing
+  is broken; the picture arrives the moment the window does something.
 
 ---
 
