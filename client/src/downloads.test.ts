@@ -59,6 +59,12 @@ describe("downloadsFor", () => {
     expect(rest).toEqual([])
   })
 
+  // The installer is unsigned, so SmartScreen warns on first run. Someone who
+  // reads that as a virus simply does not install.
+  it("warns about SmartScreen before the Windows download, not after", () => {
+    expect(downloadsFor("windows")[0]?.note).toMatch(/Executar assim mesmo/)
+  })
+
   // The AppImage updates itself but needs libfuse2; the .deb needs nothing but
   // never updates. Both cases exist in the room, so both are offered.
   it("offers the AppImage first and the .deb beside it on Linux", () => {

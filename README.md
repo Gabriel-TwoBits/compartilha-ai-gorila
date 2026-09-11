@@ -345,7 +345,6 @@ should not be crossing the tunnel.
 | `desktop/src/pipewireGraph.ts` | Reading the PipeWire graph and deciding what to wire |
 | `desktop/src/windowsProcesses.ts` | Which Windows processes may reach the broadcast |
 | `client/src/processAudio.ts` | Captured PCM into one WebRTC audio track |
-| `INSTALAR.md` | The install guide to hand to friends, in plain pt-BR |
 
 ```sh
 pnpm test        # vitest

@@ -51,7 +51,16 @@ export function detectTarget(platform: string, userAgent: string): DownloadTarge
 export function downloadsFor(target: DownloadTarget): Download[] {
   switch (target) {
     case "windows":
-      return [{ label: "Baixar para Windows", url: WINDOWS_INSTALLER, note: null }]
+      return [
+        {
+          label: "Baixar para Windows",
+          url: WINDOWS_INSTALLER,
+          // The installer is unsigned, so SmartScreen shows a blue warning on
+          // first run. Saying it here, before the download, is what keeps
+          // somebody from reading it as a virus and giving up.
+          note: 'O Windows vai avisar que protegeu o computador — é por não ser um programa assinado. Clique em "Mais informações" e em "Executar assim mesmo".',
+        },
+      ]
     case "linux":
       return [
         {
