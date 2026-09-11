@@ -90,8 +90,13 @@ export function installNow(): void {
  * one, and without this guard `npm start` throws "application is not packaged"
  * every single time.
  */
-export function start(): void {
+export function start(feedUrl: string): void {
   if (!app.isPackaged) return
+
+  // Overrides whatever electron-builder stamped into app-update.yml. The
+  // address is not in the repository, so the packaged default is a placeholder
+  // and this is the real one.
+  autoUpdater.setFeedURL({ provider: "generic", url: feedUrl })
 
   autoUpdater.autoDownload = true
   // Installing behind someone's back on quit is the difference between an

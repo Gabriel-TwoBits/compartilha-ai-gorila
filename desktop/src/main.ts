@@ -14,7 +14,13 @@ import * as updates from "./update"
  * screens and windows itself, and capture audio one application at a time.
  */
 
-const DEFAULT_SERVER_URL = "https://example.invalid"
+/**
+ * The room's address, replaced by `build.mjs` at build time.
+ *
+ * Not a literal in the source: this repository is public, and where the room
+ * lives is not something to publish with it.
+ */
+declare const __ROOM_URL__: string
 
 const WINDOW_WIDTH = 1280
 const WINDOW_HEIGHT = 800
@@ -31,7 +37,8 @@ const THUMBNAIL_HEIGHT = 180
 const PORTAL_ARGUMENT = "--gorila-portal"
 const PER_PROCESS_AUDIO_ARGUMENT = "--gorila-per-process-audio"
 
-const serverUrl = (process.env.GORILA_URL ?? DEFAULT_SERVER_URL).replace(/\/$/, "")
+/** `GORILA_URL` still wins at run time, for pointing a dev build elsewhere. */
+const serverUrl = (process.env.GORILA_URL ?? __ROOM_URL__).replace(/\/$/, "")
 
 /**
  * Wayland forbids any program from enumerating other windows, by design. There
@@ -232,7 +239,9 @@ app.whenReady().then(() => {
   // exactly who most needs the new version, so the banner this feeds sits
   // outside the logged-in area.
   updates.onUpdateState((next) => window?.webContents.send("update-state", next))
-  updates.start()
+  // The feed lives on the same server the window loads, so it is derived
+  // rather than configured twice.
+  updates.start(`${serverUrl}/atualiza/`)
 
   // Returns the source ids the PCM will arrive under. The renderer builds one
   // worklet per id and drops, in silence, any chunk whose id has no worklet —

@@ -6,3 +6,6 @@ dist/
 # electron-builder's output: installers of ~100 MB each, rebuilt by
 # `npm run dist`. A release copies the ones it wants into ../release/.
 dist-app/
+
+# The room address, baked in at build time. See .env.example.
+.env

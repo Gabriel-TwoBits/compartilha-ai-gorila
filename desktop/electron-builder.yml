@@ -18,11 +18,10 @@ files:
 asarUnpack:
   - "**/node_modules/loopback-capture/**"
 
-# Where the app looks for a new version. The room's own server serves these as
-# static files under /atualiza/; see `server/main.ts`.
-#
-# GitHub Releases would work too, but it would mean keeping a mirror of a
-# Codeberg repository just to hold three files.
+# Present only so electron-builder writes the `latest*.yml` feed files. The
+# URL here is never used: `src/update.ts` points the updater at the same server
+# the window loads, which is baked in from `desktop/.env` and stays out of this
+# public repository.
 publish:
   provider: generic
   url: https://example.invalid/atualiza/
@@ -32,7 +31,8 @@ win:
     - nsis
   icon: build/icon.png
   # Unsigned: a code-signing certificate is not worth it for a handful of
-  # friends, so SmartScreen warns on first run. INSTALAR.md says what to click.
+  # friends, so SmartScreen warns on first run; the download page says what to
+  # click before the file is even fetched.
 
 nsis:
   # Installs under the user's own AppData, asking for no administrator
