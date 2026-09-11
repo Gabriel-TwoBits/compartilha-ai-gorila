@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>CompartilhaAíGorila</title>
+    <style>
+      /* No web font: this is the first thing drawn, and it cannot wait on a
+         download to render. */
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.9rem;
+        background: #0b0b0f;
+        color: #e7e7ea;
+        font-family: system-ui, sans-serif;
+        border-radius: 12px;
+        user-select: none;
+        -webkit-app-region: drag;
+      }
+      img {
+        width: 64px;
+        opacity: 0.9;
+      }
+      p {
+        margin: 0;
+        font-size: 0.8rem;
+        color: #9a9aa4;
+      }
+      #trilho {
+        width: 180px;
+        height: 4px;
+        border-radius: 999px;
+        background: #26262c;
+        overflow: hidden;
+      }
+      #barra {
+        height: 100%;
+        width: 0;
+        background: #e7e7ea;
+        transition: width 0.2s linear;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="icon.png" alt="" />
+    <p id="frase">procurando atualização…</p>
+    <div id="trilho"><div id="barra"></div></div>
+
+    <script>
+      // Written to from the main process with executeJavaScript. No preload and
+      // no IPC channel: swapping a sentence and nudging a bar needs neither.
+      function atualizar(estado) {
+        const frase = document.getElementById("frase")
+        const barra = document.getElementById("barra")
+        if (estado.fase === "baixando") {
+          frase.textContent = `baixando a versão ${estado.versao ?? "nova"}…`
+          barra.style.width = `${estado.pct}%`
+        } else if (estado.fase === "pronto") {
+          frase.textContent = "pronto, reiniciando"
+          barra.style.width = "100%"
+        }
+      }
+    </script>
+  </body>
+</html>

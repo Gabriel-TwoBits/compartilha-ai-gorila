@@ -62,7 +62,10 @@ await mkdir("dist", { recursive: true })
 await Promise.all([
   build({ ...shared, entryPoints: ["src/main.ts"], outfile: "dist/main.cjs" }),
   build({ ...shared, entryPoints: ["src/preload.ts"], outfile: "dist/preload.cjs" }),
-  // The main process loads this one relative to itself, so it has to land
+  // The main process loads these relative to itself, so they have to land
   // beside the bundles rather than stay in src.
   copyFile("src/offline.html", "dist/offline.html"),
+  copyFile("src/splash.html", "dist/splash.html"),
+  // The splash shows the mark before any window could fetch it over the network.
+  copyFile("build/icon.png", "dist/icon.png"),
 ])

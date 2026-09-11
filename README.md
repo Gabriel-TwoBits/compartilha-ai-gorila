@@ -352,10 +352,17 @@ it on: its pure logic is covered by tests, the rest is waiting for a real one.
 1. Raise `version` in `desktop/package.json` — the number is what decides
    whether an installed copy considers itself out of date.
 2. `npm run dist` (and `npm run dist:win`, which needs Wine).
-3. Copy from `desktop/dist-app/` into `release/`: the versioned artifacts, their
+3. **`npm run smoke`**, and do not skip it. It opens the packaged app and checks
+   it reaches the room. A release once went out whose bundle threw on the first
+   line of the main process: nothing in development showed it — the failing
+   module only loads in a packaged app — and the updater could not rescue
+   anybody either, because an app that dies at startup never gets far enough to
+   look for a new version. Whoever had downloaded it was stuck until they
+   fetched a new file by hand.
+4. Copy from `desktop/dist-app/` into `release/`: the versioned artifacts, their
    `.blockmap` where one exists, and the `latest*.yml` feed. Windows and Linux
    have separate feeds, so one can be published without touching the other.
-4. Copy each installer again under a name with no version in it
+5. Copy each installer again under a name with no version in it
    (`CompartilhaAiGorila.AppImage`, `CompartilhaAiGorila.deb`,
    `CompartilhaAiGorila-instalador.exe`). Those are what the download buttons
    point at, so a link handed out once keeps working. An app already installed
@@ -363,7 +370,21 @@ it on: its pure logic is covered by tests, the rest is waiting for a real one.
 
 **The `.blockmap` has to go up too.** Without it there is no differential
 download and every update pulls the whole ~100 MB again, which is exactly what
-should not be crossing the tunnel.
+should not be crossing the tunnel. The blockmap alone is not enough, either:
+the updater asks for the changed blocks as one multi-range request, and
+`@hono/node-server`'s static handler answers those with the whole file under a
+`206` status. `server/ranges.ts` handles them before it gets the chance —
+measured, that is the difference between 165 KB and 122 MB per person per
+release.
+
+### Opening the app
+
+It looks for a new version before the main window exists, behind a small splash,
+and installs one if it finds it — nobody should walk into a version that is
+replaced a minute later. Two ceilings bound that: ten seconds to ask, ninety to
+fetch. Past either, the app opens anyway and whatever was downloading finishes
+behind it, surfacing as the banner. A server that is down never keeps anybody
+out of their own app.
 
 ## Known limitations
 

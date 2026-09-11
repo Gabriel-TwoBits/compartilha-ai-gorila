@@ -13,7 +13,8 @@
     "start": "npm run build && electron .",
     "typecheck": "tsc --noEmit",
     "dist": "npm run build && electron-builder --linux",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:win": "npm run build && electron-builder --win",
+    "smoke": "node smoke.mjs"
   },
   "devDependencies": {
     "electron": "^44.3.0",

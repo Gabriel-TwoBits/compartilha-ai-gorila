@@ -30,6 +30,9 @@ const MIN_WINDOW_HEIGHT = 600
 /** Matches the client's own surface colour, so the frame does not flash white. */
 const BACKGROUND_COLOR = "#0b0b0f"
 
+const SPLASH_WIDTH = 320
+const SPLASH_HEIGHT = 200
+
 const THUMBNAIL_WIDTH = 320
 const THUMBNAIL_HEIGHT = 180
 
@@ -146,6 +149,45 @@ function isOurOrigin(url: string): boolean {
   }
 }
 
+/**
+ * The little window that looks for an update before anything else exists.
+ *
+ * No preload and no IPC channel: the main process writes into it with
+ * `executeJavaScript`, which is all that swapping a sentence and nudging a bar
+ * needs — and the smaller the surface here, the less there is to go wrong
+ * before the app has even started.
+ */
+function createSplash(): {
+  show: (state: unknown) => void
+  close: () => void
+} {
+  const splash = new BrowserWindow({
+    width: SPLASH_WIDTH,
+    height: SPLASH_HEIGHT,
+    frame: false,
+    resizable: false,
+    transparent: true,
+    center: true,
+    show: false,
+    backgroundColor: BACKGROUND_COLOR,
+    icon: join(__dirname, "..", "build", "icon.png"),
+  })
+
+  void splash.loadFile(join(__dirname, "splash.html"))
+  splash.once("ready-to-show", () => splash.show())
+
+  return {
+    show: (state) => {
+      void splash.webContents
+        .executeJavaScript(`atualizar(${JSON.stringify(state)})`)
+        .catch(() => undefined)
+    },
+    close: () => {
+      if (!splash.isDestroyed()) splash.close()
+    },
+  }
+}
+
 function createWindow(): void {
   window = new BrowserWindow({
     width: WINDOW_WIDTH,
@@ -201,7 +243,7 @@ function createWindow(): void {
   })
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Without a handler Electron denies silently, and what reaches the page is a
   // bare NotAllowedError with no explanation. Only media is ever needed here.
   session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
@@ -226,6 +268,20 @@ app.whenReady().then(() => {
     { useSystemPicker: false },
   )
 
+  // Looks for a new version before the main window exists: nobody should walk
+  // into a version that is replaced a minute later. Every failure path here
+  // opens the app anyway.
+  //
+  // Outside a packaged app there is nothing to look for, so the window would
+  // only flash. `GORILA_SPLASH=1` forces it, to look at the thing.
+  const wantsSplash = app.isPackaged || process.env.GORILA_SPLASH === "1"
+  const splash = wantsSplash ? createSplash() : null
+  const outcome = await updates.checkOnStartup(`${serverUrl}/atualiza/`, (state) =>
+    splash?.show(state),
+  )
+  splash?.close()
+  if (outcome === "installing") return
+
   ipcMain.handle("sources", listSources)
   ipcMain.handle("pick-screen", pickScreen)
 
@@ -239,8 +295,8 @@ app.whenReady().then(() => {
   // exactly who most needs the new version, so the banner this feeds sits
   // outside the logged-in area.
   updates.onUpdateState((next) => window?.webContents.send("update-state", next))
-  // The feed lives on the same server the window loads, so it is derived
-  // rather than configured twice.
+  // The schedule from here on: a version that appears while the app is open
+  // arrives as the banner instead.
   updates.start(`${serverUrl}/atualiza/`)
 
   // Returns the source ids the PCM will arrive under. The renderer builds one

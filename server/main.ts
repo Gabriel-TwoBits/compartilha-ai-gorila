@@ -1,9 +1,13 @@
+import { open, stat } from "node:fs/promises"
+import { basename, join, resolve } from "node:path"
+import { randomUUID } from "node:crypto"
 import { serve } from "@hono/node-server"
 import { serveStatic } from "@hono/node-server/serve-static"
 import { Hono } from "hono"
 import { deleteCookie, setCookie } from "hono/cookie"
 import { routePartyTracksRequest } from "partytracks/server"
 import { normalizeNickname } from "@shared/protocol"
+import { multipartBody, parseRangeHeader, rangeLength } from "./ranges"
 import { env } from "./env"
 import { pruneIceServers } from "./iceServers"
 import { type AppEnv, requireSession } from "./middleware"
@@ -23,6 +27,9 @@ const RELEASE_DIR = "./release"
 
 /** Public path for the same. Both the first download and every update use it. */
 const RELEASE_ROUTE = "/atualiza"
+
+/** What the installers are: opaque bytes, whatever their extension. */
+const RELEASE_CONTENT_TYPE = "application/octet-stream"
 
 /** Enough of an upstream error body to identify it, without flooding the log. */
 const MAX_LOGGED_BODY_CHARS = 500
@@ -195,12 +202,76 @@ app.all("/partytracks/*", requireSession, async (c) => {
 app.get("/ws", requireSession, signalingRoute)
 
 /**
+ * Serves a request asking for several byte ranges at once.
+ *
+ * The desktop updater fetches a new version differentially: it reads the
+ * `.blockmap`, works out which blocks changed, and asks for exactly those in
+ * one request. `@hono/node-server`'s static handler answers that with the whole
+ * file under a `206` status, the updater rejects the shape, and a 165 KB update
+ * becomes a 122 MB one — per person, every release, across a tunnel that asks
+ * for moderation with heavy traffic.
+ *
+ * Only multi-range requests come through here. A single range the static
+ * handler already gets right, and everything else is a plain download.
+ */
+async function serveMultiRange(path: string, rangeHeader: string): Promise<Response | null> {
+  // The route is public, so the path is untrusted: resolve it and refuse
+  // anything that climbs out of the release directory.
+  const root = resolve(RELEASE_DIR)
+  const file = resolve(join(root, basename(path)))
+  if (!file.startsWith(root)) return null
+
+  const info = await stat(file).catch(() => null)
+  if (info === null || !info.isFile()) return null
+
+  const ranges = parseRangeHeader(rangeHeader, info.size)
+  if (ranges === null || ranges.length < 2) return null
+
+  const handle = await open(file, "r").catch(() => null)
+  if (handle === null) return null
+
+  try {
+    const parts = []
+    for (const range of ranges) {
+      const bytes = new Uint8Array(rangeLength(range))
+      await handle.read(bytes, 0, bytes.byteLength, range.start)
+      parts.push({ range, bytes })
+    }
+
+    const boundary = randomUUID()
+    const body = multipartBody(parts, info.size, RELEASE_CONTENT_TYPE, boundary)
+
+    return new Response(body, {
+      status: 206,
+      headers: {
+        "Content-Type": `multipart/byteranges; boundary=${boundary}`,
+        "Content-Length": String(body.byteLength),
+        "Accept-Ranges": "bytes",
+      },
+    })
+  } finally {
+    await handle.close()
+  }
+}
+
+/**
  * Installers and the update feed, served to anyone.
  *
  * No session in front: the first download happens before anybody has an
  * account of any kind, and what is behind it is a binary the whole room is
  * meant to have. The room itself stays gated by the password.
  */
+app.use(`${RELEASE_ROUTE}/*`, async (c, next) => {
+  const rangeHeader = c.req.header("Range")
+  if (rangeHeader === undefined) return next()
+
+  const response = await serveMultiRange(c.req.path.slice(RELEASE_ROUTE.length), rangeHeader)
+  // Anything this cannot answer falls through to the static handler, which
+  // covers a single range and the plain download.
+  if (response === null) return next()
+  return response
+})
+
 app.use(
   `${RELEASE_ROUTE}/*`,
   serveStatic({
