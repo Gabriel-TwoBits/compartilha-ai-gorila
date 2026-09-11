@@ -167,46 +167,81 @@ before reaching for any of the above.
 
 ---
 
-## Sharing it with friends (Cloudflare Tunnel)
+## Hosting it permanently (Tailscale Funnel)
 
 **`http://localhost` works; `http://192.168.x.x` does not.** Capturing the screen
-requires a secure context, so the moment the app leaves your machine it needs
-HTTPS. A quick tunnel settles that in one command: a public HTTPS URL pointing at
-the local server, with no Cloudflare account, no domain and no port forwarding on
-the router.
+requires a secure context, so the moment the app leaves this machine it needs
+HTTPS.
 
-**1. Install
-[`cloudflared`](https://github.com/cloudflare/cloudflared/releases/latest).**
+A Cloudflare quick tunnel supplies that in one command, but draws a new random
+name every run — an address nobody can bookmark and nothing can be built on.
+Tailscale Funnel gives a **permanent** one instead: a fixed
+`https://<machine>.<tailnet>.ts.net`, with a certificate Tailscale renews, no
+domain to buy and no port forwarded on the router. **Friends install nothing** —
+Funnel is the public internet, and Tailscale only runs here.
 
-**2. Run a single command.**
+Only signalling crosses it. Login, the presence socket and the SFU proxy are
+kilobytes; the video goes straight from each browser to Cloudflare and never
+touches this machine.
+
+**1. Join the tailnet.**
 
 ```sh
-pnpm share
+sudo apt install tailscale        # or https://tailscale.com/download
+sudo tailscale up
 ```
 
-It builds the client, starts the server in production mode — one port, and the
-session cookie comes out `Secure`, as the tunnel's HTTPS demands — and puts the
-tunnel in front, announcing the URL as soon as it exists:
+**2. Open the door.** Funnel needs MagicDNS, HTTPS certificates and the `funnel`
+node attribute, all in the admin console. Running the next command before that
+is fine — it prints exactly what is missing, with a link straight to the switch.
+
+**3. Put it in front of the server.**
+
+```sh
+tailscale funnel --bg 8787
+tailscale funnel status           # prints the public URL
+```
+
+`--bg` is what makes it permanent: the mapping is stored in `tailscaled` and
+comes back on its own after a reboot. There is no service of ours to install for
+this half.
+
+**4. Keep the server up.** `scripts/gorila.service` is a user unit — nothing here
+needs root:
+
+```sh
+cp scripts/gorila.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now gorila
+loginctl enable-linger              # survives closing the terminal
+```
+
+Then stop the machine from sleeping. A suspended host takes the Funnel down with
+it, and the address answers nothing until it wakes.
+
+Hand the URL out with the `ROOM_PASSWORD`, and ask for Chrome/Chromium (see
+"Known limitations"). Anyone holding the URL lands on the login screen, so the
+password stays the gate.
+
+### Testing without setting any of that up
+
+`pnpm share` still builds the client, starts the server in production mode and
+puts a throwaway Cloudflare quick tunnel in front, announcing the URL as soon as
+it exists:
 
 ```
   Room reachable at https://<four-words>.trycloudflare.com
 ```
 
-Hand the URL to your friends along with the `ROOM_PASSWORD`, and ask them to open
-it in Chrome/Chromium (see "Known limitations"). Anyone holding the URL lands on
-the login screen, so the password remains the gate. `Ctrl+C` takes down server
-and tunnel together and the address dies with them; the next run draws another
-one.
+`Ctrl+C` takes down server and tunnel together and the address dies with them.
+It asks for no account and costs nothing, but carries no uptime guarantee and
+cuts off at 200 concurrent requests: it is for testing, not for hosting.
 
-To exercise the app in development, point the tunnel at Vite (`cloudflared tunnel
---url http://localhost:5173`) instead of Node — that is why `vite.config.ts`
-accepts `.trycloudflare.com` hosts. On that path the cookie comes out without
-`Secure` and HMR may complain through the tunnel; for testing with real people,
-prefer the production route above.
-
-The tunnel costs nothing and asks for no account, but it carries no uptime
-guarantee and cuts off at 200 concurrent requests: it is for testing, not for
-hosting.
+To exercise the app in development, point a tunnel at Vite (`cloudflared tunnel
+--url http://localhost:5173`, or `tailscale funnel 5173`) instead of Node — that
+is why `vite.config.ts` accepts both host suffixes. On that path the cookie comes
+out without `Secure` and HMR may complain through the tunnel; for testing with
+real people, prefer the production route above.
 
 ### When the video never arrives
 
@@ -214,7 +249,11 @@ A black screen and `ICE failed` in the console mean there is no direct UDP path
 to the SFU, almost always a symmetric NAT or a network blocking outbound UDP on
 the viewer's side. TURN is the fix: create the key under Realtime → TURN, fill in
 `TURN_APP_ID` and `TURN_APP_TOKEN` and restart the server, which reads the
-environment only at boot. The tunnel stays up and the URL does not change.
+environment only at boot. The address does not change.
+
+Set it up before handing the link out rather than after. This failure lands on
+the viewer's network, not on yours, and from here it is indistinguishable from
+"it just doesn't work".
 
 ## Known limitations
 
@@ -243,7 +282,8 @@ environment only at boot. The tunnel stays up and the URL does not change.
 | `client/src/tracks.ts` | PartyTracks singletons and the 720p30 / 2.5 Mbps ceilings |
 | `client/src/audioSource.ts` | Which audio source the broadcast uses, and its capture |
 | `client/src/components/Stage.tsx` | Main panel: local preview or remote track |
-| `scripts/share.ts` | Build, server and tunnel in one command (`pnpm share`) |
+| `scripts/share.ts` | Build, server and quick tunnel in one command (`pnpm share`) |
+| `scripts/gorila.service` | systemd user unit that keeps the server up across reboots |
 
 ```sh
 pnpm test        # vitest

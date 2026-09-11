@@ -1,0 +1,38 @@
+# Keeps the room server up across reboots, crashes and logouts.
+#
+# A user service rather than a system one: the room is one person's machine
+# hosting for their friends, and nothing here needs root. The flip side is that
+# a user manager stops when its last session ends, so this needs
+# `loginctl enable-linger` to survive closing the terminal. The README spells
+# out the install.
+#
+# Paths assume the repository sits at ~/personal-projects/compartilha-ai-gorila.
+# Adjust WorkingDirectory, EnvironmentFile and ExecStart together if it moved.
+
+[Unit]
+Description=CompartilhaAiGorila room server
+
+[Service]
+Type=simple
+WorkingDirectory=%h/personal-projects/compartilha-ai-gorila
+
+# server/env.ts reads process.env, and systemd loads these before exec — hence
+# no --env-file on the command below. The file is plain KEY=value, which is all
+# systemd parses: no quotes, no interpolation, no `export`.
+EnvironmentFile=%h/personal-projects/compartilha-ai-gorila/.env
+Environment=NODE_ENV=production
+
+# The tsx below is a /bin/sh shim that ends in `exec node`, and a service
+# inherits none of the shell's PATH. Volta's shim directory comes first because
+# that is where this machine's node lives.
+Environment=PATH=%h/.volta/bin:/usr/local/bin:/usr/bin:/bin
+
+# The local tsx, not `pnpm start`: a signal sent to the package-manager wrapper
+# does not reach Node, which stays up holding the port.
+ExecStart=%h/personal-projects/compartilha-ai-gorila/node_modules/.bin/tsx server/main.ts
+
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
