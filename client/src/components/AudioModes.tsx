@@ -31,6 +31,9 @@ const MODE_HINTS: Record<ModeKind, string> = {
 
 const MODE_ORDER: ModeKind[] = ["everything", "include", "system", "none"]
 
+/** The two that need process loopback; the other two work on any Windows. */
+const PER_PROCESS_MODES: ModeKind[] = ["everything", "include"]
+
 const optionClassName = "flex w-full items-start gap-2 rounded-lg border p-3 text-left transition"
 const chosenClassName = "border-accent bg-surface-raised"
 const idleClassName = "border-edge hover:bg-surface-raised"
@@ -46,6 +49,20 @@ export function AudioModes() {
   // Seeded from the shared default rather than from a literal here: a
   // broadcast started without ever opening this panel is already wired, and the
   // panel has to show what is actually on air.
+  const bridge = desktopBridge()
+
+  /**
+   * Whether this machine can capture one application at a time. False only on a
+   * Windows older than process loopback, where the choice is the whole device
+   * or nothing — which is what the browser already offers.
+   */
+  const perProcess = bridge === null || bridge.canCapturePerProcess
+
+  /** The modes this machine can actually deliver. */
+  const offered = MODE_ORDER.filter(
+    (candidate) => perProcess || !PER_PROCESS_MODES.includes(candidate),
+  )
+
   const initial = currentAudioMode()
   const [kind, setKind] = useState<ModeKind>(initial.kind)
   const [pids, setPids] = useState<number[]>(initial.kind === "include" ? initial.pids : [])
@@ -63,7 +80,6 @@ export function AudioModes() {
   }, [])
 
   useEffect(() => {
-    const bridge = desktopBridge()
     if (bridge === null) return undefined
 
     let cancelled = false
@@ -99,7 +115,18 @@ export function AudioModes() {
 
   return (
     <div className="flex flex-col gap-3">
-      {MODE_ORDER.map((candidate) => (
+      {/* Saying so up front beats the alternative: the capture fails at run
+          time with nothing useful to report, and the broadcast goes out
+          silent. */}
+      {!perProcess && (
+        <p className="rounded-lg border border-edge p-3 text-xs text-ink-muted">
+          Este Windows é antigo demais para separar o áudio por aplicativo — isso precisa do
+          build 20348 ou do Windows 11. Dá para transmitir com o som do sistema inteiro, mas aí
+          o Discord vai junto, igual ao site.
+        </p>
+      )}
+
+      {offered.map((candidate) => (
         <button
           key={candidate}
           type="button"

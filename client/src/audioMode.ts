@@ -1,5 +1,5 @@
 import { BehaviorSubject, type Observable } from "rxjs"
-import type { AudioMode } from "./desktop"
+import { type AudioMode, desktopBridge } from "./desktop"
 
 /**
  * Which applications the broadcast carries, inside the desktop app.
@@ -11,16 +11,26 @@ import type { AudioMode } from "./desktop"
  */
 
 /**
- * Everything on the list, which is everything making sound except Discord and
- * ourselves — the list never contains those.
+ * What a broadcast carries when nobody has said otherwise.
  *
- * The default because it is the one that is right without being told anything:
- * it picks up applications opened later, so a game started after the broadcast
- * is audible without anybody going back to tick it.
+ * Everything on the list, which is everything making sound except Discord and
+ * ourselves — the list never contains those. It is the right answer without
+ * being told anything, because it picks up applications opened later: a game
+ * started mid-broadcast is audible without anybody going back to tick it.
+ *
+ * The exception is a Windows too old for process loopback. Neither
+ * per-application mode works there, so the honest default is the whole device —
+ * the same thing the browser offers, Discord and all. Deciding it here rather
+ * than in the panel is what makes it hold for a broadcast started without the
+ * panel ever being opened.
  */
-const DEFAULT_MODE: AudioMode = { kind: "everything" }
+function defaultMode(): AudioMode {
+  const bridge = desktopBridge()
+  if (bridge !== null && !bridge.canCapturePerProcess) return { kind: "system" }
+  return { kind: "everything" }
+}
 
-const selected = new BehaviorSubject<AudioMode>(DEFAULT_MODE)
+const selected = new BehaviorSubject<AudioMode>(defaultMode())
 
 export const audioMode$: Observable<AudioMode> = selected.asObservable()
 

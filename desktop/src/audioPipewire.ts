@@ -1,7 +1,7 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process"
 import { promisify } from "node:util"
+import type { AudioMode } from "./audioMode"
 import {
-  type AudioMode,
   type PipewireObject,
   type PortPair,
   appsForMode,

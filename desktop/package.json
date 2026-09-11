@@ -17,5 +17,8 @@
     "electron": "^44.3.0",
     "esbuild": "^0.25.12",
     "typescript": "^7.0.2"
+  },
+  "optionalDependencies": {
+    "loopback-capture": "^3.0.2"
   }
 }

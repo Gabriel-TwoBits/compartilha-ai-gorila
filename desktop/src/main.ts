@@ -1,7 +1,8 @@
 import { BrowserWindow, app, desktopCapturer, ipcMain, session, shell } from "electron"
 import { join } from "node:path"
-import type { AudioMode } from "./pipewireGraph"
+import type { AudioMode } from "./audioMode"
 import * as pipewireAudio from "./audioPipewire"
+import * as wasapiAudio from "./audioWasapi"
 
 /**
  * Main process of the desktop shell.
@@ -25,8 +26,9 @@ const BACKGROUND_COLOR = "#0b0b0f"
 const THUMBNAIL_WIDTH = 320
 const THUMBNAIL_HEIGHT = 180
 
-/** Flag handed to the preload, which cannot read this process's variables. */
+/** Flags handed to the preload, which cannot read this process's variables. */
 const PORTAL_ARGUMENT = "--gorila-portal"
+const PER_PROCESS_AUDIO_ARGUMENT = "--gorila-per-process-audio"
 
 const serverUrl = (process.env.GORILA_URL ?? DEFAULT_SERVER_URL).replace(/\/$/, "")
 
@@ -46,6 +48,16 @@ if (process.platform === "linux") {
   app.commandLine.appendSwitch("ozone-platform-hint", "auto")
   app.commandLine.appendSwitch("enable-features", "WebRTCPipeWireCapturer")
 }
+
+/**
+ * Whether this machine can capture audio one application at a time.
+ *
+ * False only on a Windows older than process loopback. Saying so up front beats
+ * the alternative: the capture fails at run time with nothing useful to report,
+ * and the broadcast simply goes out silent.
+ */
+const canCapturePerProcess =
+  process.platform !== "win32" || wasapiAudio.canCapturePerProcess()
 
 let window: BrowserWindow | null = null
 
@@ -109,12 +121,13 @@ async function pickScreen(): Promise<boolean> {
 /**
  * The audio backend for this platform.
  *
- * Only PipeWire exists so far. Windows needs a different one entirely — one
- * WASAPI capture client per application, and therefore one source id per pid
- * rather than the single one this backend returns.
+ * The two answer the same three calls and differ in everything underneath.
+ * Importing both is safe only because each resolves what it needs INSIDE its
+ * functions: the Windows one would otherwise die on import here, where its
+ * optional native addon does not exist.
  */
 function audioBackend(): typeof pipewireAudio {
-  return pipewireAudio
+  return process.platform === "win32" ? wasapiAudio : pipewireAudio
 }
 
 function isOurOrigin(url: string): boolean {
@@ -143,7 +156,10 @@ function createWindow(): void {
       preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      additionalArguments: [`${PORTAL_ARGUMENT}=${usesPortal ? "1" : "0"}`],
+      additionalArguments: [
+        `${PORTAL_ARGUMENT}=${usesPortal ? "1" : "0"}`,
+        `${PER_PROCESS_AUDIO_ARGUMENT}=${canCapturePerProcess ? "1" : "0"}`,
+      ],
     },
   })
 

@@ -41,6 +41,13 @@ export type DesktopBridge = {
    * the app has no list to show and the picker belongs to the system.
    */
   usesPortal: boolean
+  /**
+   * Whether this machine can capture one application at a time.
+   *
+   * False only on a Windows older than process loopback. There the choice is
+   * the whole device or nothing, which is what the browser already offers.
+   */
+  canCapturePerProcess: boolean
   sources: () => Promise<DesktopSource[]>
   /** Raises the system picker. `false` means it was dismissed. */
   pickScreen: () => Promise<boolean>

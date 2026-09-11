@@ -13,6 +13,7 @@ import { contextBridge, ipcRenderer } from "electron"
  */
 
 const PORTAL_ARGUMENT = "--gorila-portal"
+const PER_PROCESS_AUDIO_ARGUMENT = "--gorila-per-process-audio"
 
 /**
  * Whether the system portal owns the screen choice.
@@ -22,9 +23,15 @@ const PORTAL_ARGUMENT = "--gorila-portal"
  */
 const usesPortal = process.argv.some((argument) => argument === `${PORTAL_ARGUMENT}=1`)
 
+/** False on a Windows too old for process loopback; true everywhere else. */
+const canCapturePerProcess = process.argv.some(
+  (argument) => argument === `${PER_PROCESS_AUDIO_ARGUMENT}=1`,
+)
+
 contextBridge.exposeInMainWorld("gorila", {
   platform: process.platform,
   usesPortal,
+  canCapturePerProcess,
 
   /** Screens and windows with thumbnails. Always empty under the portal. */
   sources: () => ipcRenderer.invoke("sources"),

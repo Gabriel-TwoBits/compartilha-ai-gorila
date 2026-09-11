@@ -1,3 +1,5 @@
+import type { AudioMode } from "./audioMode"
+
 /**
  * Reading the PipeWire graph, and deciding what to wire to what.
  *
@@ -197,14 +199,6 @@ const NEVER_BROADCAST = /^(discord(ptb|canary|development)?|electron|compartilha
 export function isExcludedFromBroadcast(app: AudioApp): boolean {
   return NEVER_BROADCAST.test(app.binary)
 }
-
-export type AudioMode =
-  | { kind: "none" }
-  | { kind: "system" }
-  /** Only the ticked pids. */
-  | { kind: "include"; pids: number[] }
-  /** Everything in the list, and so everything opened later too. */
-  | { kind: "everything" }
 
 /**
  * Which applications a mode actually wires up.
