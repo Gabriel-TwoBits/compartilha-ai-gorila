@@ -149,7 +149,10 @@ export function RoomScreen({ nickname, onLogout }: Props) {
       <header className="flex items-center justify-between border-b border-edge px-4 py-3">
         <span className="flex items-center gap-2 text-lg font-semibold">
           <img src="/icon.png" alt="" className="size-6" />
-          Compartilha<span className="text-accent">AíGorila</span>
+          {/* The whole name is one flex item: loose, the row's gap opens inside it. */}
+          <span>
+            Compartilha<span className="text-accent">AíGorila</span>
+          </span>
         </span>
 
         <div className="flex items-center gap-3">

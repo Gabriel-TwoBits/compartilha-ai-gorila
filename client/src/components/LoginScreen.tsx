@@ -42,7 +42,10 @@ export function LoginScreen({ onLogin }: Props) {
       >
         <h1 className="mb-1 flex items-center gap-2.5 text-2xl font-semibold">
           <img src="/icon.png" alt="" className="size-8" />
-          Compartilha<span className="text-accent">AíGorila</span>
+          {/* The whole name is one flex item: loose, the row's gap opens inside it. */}
+          <span>
+            Compartilha<span className="text-accent">AíGorila</span>
+          </span>
         </h1>
         <p className="mb-8 text-sm text-ink-muted">Entre na sala pra assistir ou transmitir.</p>
 
