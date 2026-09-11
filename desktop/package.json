@@ -1,0 +1,21 @@
+{
+  "name": "compartilha-ai-gorila-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop shell for CompartilhaAiGorila: its own screen picker, and per-application audio",
+  "license": "AGPL-3.0-only",
+  "main": "dist/main.cjs",
+  "homepage": "https://codeberg.org/Gabriel-TwoBits/compartilha-ai-gorila",
+  "author": "Gabriel-TwoBits",
+  "desktopName": "compartilha-ai-gorila.desktop",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "esbuild": "^0.25.12",
+    "typescript": "^7.0.2"
+  }
+}

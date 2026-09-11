@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    // The main process is Node with Electron's APIs on top and never touches
+    // the DOM, so the root's DOM libs and vite/client types do not apply.
+    "lib": ["ES2023"],
+    "types": ["node"],
+    // Module settings are inherited on purpose. The sources are authored as ESM
+    // and esbuild emits CommonJS from them, so `bundler` resolution is what
+    // actually describes this build — `node16` would classify the sources as
+    // CommonJS and collide with the root's `verbatimModuleSyntax`.
+    "paths": {}
+  },
+  "include": ["src"]
+}

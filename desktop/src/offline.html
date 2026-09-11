@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>CompartilhaAíGorila</title>
+    <style>
+      /* No web font: this page shows up exactly when the network is the problem. */
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        background: #0b0b0f;
+        color: #e7e7ea;
+        font-family: system-ui, sans-serif;
+        text-align: center;
+      }
+      p {
+        margin: 0;
+        max-width: 28rem;
+        color: #9a9aa4;
+        line-height: 1.5;
+      }
+      button {
+        padding: 0.65rem 1.25rem;
+        border: none;
+        border-radius: 0.5rem;
+        background: #e7e7ea;
+        color: #0b0b0f;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:hover {
+        filter: brightness(0.9);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Não achei a sala</h1>
+    <p>
+      O servidor não respondeu. Ou ele está fora do ar, ou esta máquina está sem internet —
+      o app precisa dele até para desenhar a tela de entrada.
+    </p>
+    <button type="button" onclick="window.gorila.reload()">Tentar de novo</button>
+  </body>
+</html>

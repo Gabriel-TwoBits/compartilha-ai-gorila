@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import type { Participant } from "@shared/protocol"
 import { logout } from "../api"
+import { type DesktopSource, desktopBridge } from "../desktop"
+import { chooseSource } from "../desktopScreenshare"
 import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
 import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
@@ -8,6 +10,7 @@ import { AudioSource } from "./AudioSource"
 import { LevelMeter } from "./LevelMeter"
 import { Participants } from "./Participants"
 import { Quality } from "./Quality"
+import { SourcePicker } from "./SourcePicker"
 import { SoundToggle } from "./SoundToggle"
 import { Stage } from "./Stage"
 
@@ -51,6 +54,31 @@ export function RoomScreen({ nickname, onLogout }: Props) {
 
   /** Whose broadcasts the viewer asked to open. Nothing is pulled until they do. */
   const [openedNicknames, setOpenedNicknames] = useState<string[]>([])
+
+  /**
+   * Our own picker, open only in the desktop app where a list exists.
+   *
+   * Under the Wayland portal, and in a browser, the capture call raises a
+   * picker of its own — opening one here first would be two pickers for one
+   * choice.
+   */
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const bridge = desktopBridge()
+  const picksOwnSource = bridge !== null && !bridge.usesPortal
+
+  function handleBroadcastClick(): void {
+    if (broadcast.isBroadcasting || !picksOwnSource) {
+      broadcast.toggle()
+      return
+    }
+    setPickerOpen(true)
+  }
+
+  function startWith(source: DesktopSource): void {
+    chooseSource(source)
+    setPickerOpen(false)
+    broadcast.toggle()
+  }
 
   const participants: Participant[] = signaling.room?.participants ?? []
   const you = signaling.room?.you ?? null
@@ -113,7 +141,10 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {pickerOpen && (
+          <SourcePicker onChoose={startWith} onCancel={() => setPickerOpen(false)} />
+        )}
         <Stage
           broadcasters={broadcasters}
           you={you}
@@ -136,7 +167,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
 
           <button
             type="button"
-            onClick={broadcast.toggle}
+            onClick={handleBroadcastClick}
             className={[
               "rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:brightness-110",
               broadcast.isBroadcasting ? "bg-red-500 text-white" : "bg-accent text-accent-ink",

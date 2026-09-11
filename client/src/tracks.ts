@@ -2,7 +2,10 @@ import { PartyTracks, type Screenshare, getScreenshare, setLogLevel } from "part
 import type { TrackMetadata } from "partytracks/client"
 import { type Observable, map } from "rxjs"
 import type { TrackRef } from "@shared/protocol"
+import { isDesktop } from "./desktop"
+import { desktopScreenshare } from "./desktopScreenshare"
 import { captureConstraints, currentQuality, quality$, sendEncodings } from "./quality"
+import type { ScreenSource } from "./screenSource"
 
 // partytracks logs at "warn" by default, which hides every peer connection and
 // ICE transition. Those are the only trace a session that fails to connect
@@ -26,7 +29,16 @@ export function getPartyTracks(): PartyTracks {
   return partyTracks
 }
 
-export function getScreenshareSource(): Screenshare {
+/**
+ * Where the screen comes from: our own capture inside the desktop app, the
+ * browser's picker everywhere else.
+ *
+ * Nothing downstream branches on this. `PartyTracks.push` takes any observable
+ * of a track, so the SFU layer never learns which one it got.
+ */
+export function getScreenshareSource(): ScreenSource {
+  if (isDesktop()) return desktopScreenshare
+
   // The constraints are read once, when the singleton is built: `getScreenshare`
   // takes them at construction and offers no way to revise them. A preset picked
   // later is applied to the live track instead, by `applyQualityToTrack` below.
