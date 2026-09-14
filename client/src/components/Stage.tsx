@@ -305,9 +305,14 @@ function Tile({
       <div
         ref={frameRef}
         className={[
-          "relative flex min-h-0 flex-col",
+          "flex min-h-0 flex-col",
           frameClassName,
-          isFullscreen ? fullscreenFrameClassName : "",
+          // Never `relative` alongside the fullscreen class: both set
+          // `position`, and Tailwind emits `.relative` after `.fixed`, so the
+          // tile would win its own way back into the grid while the window
+          // alone filled the screen. `fixed` anchors the floating header just
+          // as well.
+          isFullscreen ? fullscreenFrameClassName : "relative",
           hidden ? "cursor-none" : "",
         ].join(" ")}
       >
