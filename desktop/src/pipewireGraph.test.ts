@@ -192,8 +192,10 @@ describe("isExcludedFromBroadcast", () => {
 
   // Capturing our own output while watching someone sends their audio back to
   // them.
-  it("keeps ourselves out", () => {
-    expect(isExcludedFromBroadcast({ ...firefox, binary: "compartilha-ai-gorila" })).toBe(true)
+  it("keeps ourselves out, under either name the app runs as", () => {
+    for (const binary of ["electron", "compartilha-ai-gorila", "compartilha-ai-gorila-desktop"]) {
+      expect(isExcludedFromBroadcast({ ...firefox, binary })).toBe(true)
+    }
   })
 
   it("lets an ordinary application through", () => {

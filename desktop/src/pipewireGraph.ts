@@ -193,8 +193,14 @@ export function pairPorts(outputs: Port[], inputs: Port[]): PortPair[] {
  * Discord because carrying the call is the entire problem this app exists to
  * solve, and ourselves because capturing our own output while watching someone
  * feeds their audio back to them.
+ *
+ * Ourselves means BOTH names the app runs under: `electron` from a checkout,
+ * and `compartilha-ai-gorila-desktop` — the `package.json` name, which is what
+ * electron-builder calls the packaged executable. Covering only the first made
+ * every release capture itself while development looked perfectly fine.
  */
-const NEVER_BROADCAST = /^(discord(ptb|canary|development)?|electron|compartilha-ai-gorila)$/i
+const NEVER_BROADCAST =
+  /^(discord(ptb|canary|development)?|electron|compartilha-ai-gorila(-desktop)?)$/i
 
 export function isExcludedFromBroadcast(app: AudioApp): boolean {
   return NEVER_BROADCAST.test(app.binary)
