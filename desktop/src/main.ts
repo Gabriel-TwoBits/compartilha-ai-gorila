@@ -231,6 +231,19 @@ function createWindow(): void {
   window.on("enter-full-screen", () => window?.webContents.send("fullscreen", true))
   window.on("leave-full-screen", () => window?.webContents.send("fullscreen", false))
 
+  // Escape leaves fullscreen, the way it does everywhere else. Chromium only
+  // does that for a page that took the screen through `requestFullscreen`, and
+  // here it is the WINDOW that holds it — so nothing ends it but F11 and the
+  // tile's own button, neither of which is what a hand reaches for. Taken
+  // before the page rather than inside it because the window owns the state,
+  // and swallowed for the same reason Chromium swallows it.
+  window.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.key !== "Escape") return
+    if (window === null || !window.isFullScreen()) return
+    window.setFullScreen(false)
+    event.preventDefault()
+  })
+
   // The page is remote, so treat it as remote: it may only navigate within its
   // own origin, and anything it opens goes to the real browser.
   window.webContents.on("will-navigate", (event, url) => {
