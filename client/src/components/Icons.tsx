@@ -113,6 +113,16 @@ export function SpeakerIcon() {
   )
 }
 
+/** The speaker, struck through — the same idea as the bell's own off state. */
+export function SpeakerOffIcon() {
+  return (
+    <Stroked>
+      <path d="M11 5 6.5 9H3v6h3.5L11 19Z" />
+      <path d="M3 3l18 18" />
+    </Stroked>
+  )
+}
+
 export function BellIcon() {
   return (
     <Stroked>

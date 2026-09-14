@@ -21,6 +21,7 @@ import {
   ExitFullscreenIcon,
   PlayIcon,
   SpeakerIcon,
+  SpeakerOffIcon,
 } from "./Icons"
 
 const DEFAULT_VOLUME = 1
@@ -94,7 +95,11 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [volume, setVolume] = useState(DEFAULT_VOLUME)
+  const [muted, setMuted] = useState(false)
   const chrome = useContext(TileChrome)
+
+  /** The slider at the bottom is silence too, and the icon has to say so. */
+  const silent = muted || volume === 0
 
   // Deps are the primitive parts of the address: the objects arrive fresh from
   // JSON on every room snapshot, so memoizing on them would rebuild the pull on
@@ -150,8 +155,28 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
   function handleVolume(event: ChangeEvent<HTMLInputElement>): void {
     const next = Number(event.target.value)
     setVolume(next)
+    // Reaching for the slider is asking to hear something, so it lifts a mute
+    // rather than fighting it.
+    setMuted(false)
     const element = audioRef.current
-    if (element !== null) element.volume = next
+    if (element === null) return
+    element.volume = next
+    element.muted = false
+  }
+
+  function toggleMuted(): void {
+    const next = !silent
+    // Leaving mute with the slider at the bottom would be silence again, under
+    // an icon claiming otherwise.
+    const restored = !next && volume === 0 ? DEFAULT_VOLUME : volume
+
+    setMuted(next)
+    setVolume(restored)
+
+    const element = audioRef.current
+    if (element === null) return
+    element.muted = next
+    element.volume = restored
   }
 
   return (
@@ -185,14 +210,23 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
       )}
 
       {audioTrack$ !== null && !audioBlocked && (
-        <label
+        <div
           {...chrome.holdProps}
           className={[
             "absolute right-3 bottom-3 flex items-center gap-2 rounded-md bg-surface/80 px-3 py-1.5 text-xs text-ink-muted",
             chromeClassName(chrome.idle),
           ].join(" ")}
         >
-          <SpeakerIcon />
+          <button
+            type="button"
+            onClick={toggleMuted}
+            aria-pressed={silent}
+            aria-label={silent ? "Ouvir a transmissão" : "Silenciar a transmissão"}
+            title={silent ? "Ouvir a transmissão" : "Silenciar a transmissão"}
+            className="transition hover:text-ink"
+          >
+            {silent ? <SpeakerOffIcon /> : <SpeakerIcon />}
+          </button>
           <input
             type="range"
             min={0}
@@ -203,7 +237,7 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
             aria-label="volume"
             className="accent-accent"
           />
-        </label>
+        </div>
       )}
     </div>
   )
