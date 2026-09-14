@@ -16,6 +16,28 @@ import { signalingRoute, startHeartbeat, webSocketServer } from "./signaling"
 
 const CLIENT_BUILD_DIR = "./dist/client"
 
+/** Vite writes every hashed asset under this name. */
+const ASSETS_SEGMENT = "/assets/"
+
+const SECONDS_PER_YEAR = 60 * 60 * 24 * 365
+
+/**
+ * How the client is cached, which is what decides whether a deploy is ever seen.
+ *
+ * Vite stamps a content hash into each asset's file name, so those can be kept
+ * for good: changed content arrives under a different name and the old one is
+ * simply never asked for again. `index.html` is the one that cannot be kept —
+ * it is what says which names are current.
+ *
+ * Saying nothing is not neutral. A response carrying no `Cache-Control` is
+ * cached on a heuristic instead: a tenth of the age since it was last modified,
+ * which for a build a few days old is hours of serving the previous room to
+ * everyone who already had it, with no reload short of a forced one able to ask
+ * for the new one.
+ */
+const IMMUTABLE_CACHE = `public, max-age=${SECONDS_PER_YEAR}, immutable`
+const REVALIDATE_CACHE = "no-cache"
+
 /**
  * Where the desktop app's installers live, and the update feed with them.
  *
@@ -282,7 +304,15 @@ app.use(
 
 // In development Vite serves the UI and proxies these routes here instead.
 if (env.isProduction) {
-  app.use("/*", serveStatic({ root: CLIENT_BUILD_DIR }))
+  app.use(
+    "/*",
+    serveStatic({
+      root: CLIENT_BUILD_DIR,
+      onFound: (path, c) => {
+        c.header("Cache-Control", path.includes(ASSETS_SEGMENT) ? IMMUTABLE_CACHE : REVALIDATE_CACHE)
+      },
+    }),
+  )
 }
 
 serve(
