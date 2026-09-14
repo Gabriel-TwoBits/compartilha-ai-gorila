@@ -2,6 +2,7 @@ import {
   type ChangeEvent,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -12,6 +13,7 @@ import { useObservable } from "partytracks/react"
 import { type Observable, of } from "rxjs"
 import type { Broadcast, Participant } from "@shared/protocol"
 import { useFullscreen } from "../fullscreen"
+import { TileChrome, usePointerIdle } from "../pointerIdle"
 import { getScreenshareSource, getWatchTracks } from "../tracks"
 import {
   CloseIcon,
@@ -38,6 +40,18 @@ const frameClassName = "overflow-hidden rounded-2xl border border-dashed border-
  * browser it only repeats what the fullscreen element already is.
  */
 const fullscreenFrameClassName = "fixed inset-0 z-50 rounded-none border-none bg-surface"
+
+/**
+ * Anything drawn over the picture, while the pointer is quiet and after it
+ * moves. Shared so that the header and the controls in the corner of the video
+ * fade as one thing rather than as several.
+ */
+function chromeClassName(hidden: boolean): string {
+  return [
+    "transition-opacity duration-300",
+    hidden ? "pointer-events-none opacity-0" : "opacity-100",
+  ].join(" ")
+}
 
 const headerButtonClassName =
   "shrink-0 rounded-md px-2 py-1 text-xs text-ink-muted transition hover:bg-surface-raised hover:text-ink"
@@ -80,6 +94,7 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [volume, setVolume] = useState(DEFAULT_VOLUME)
+  const chrome = useContext(TileChrome)
 
   // Deps are the primitive parts of the address: the objects arrive fresh from
   // JSON on every room snapshot, so memoizing on them would rebuild the pull on
@@ -145,16 +160,24 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
       <audio ref={audioRef} />
 
       {audioTrack$ === null && (
-        <p className="absolute top-3 left-3 rounded-md bg-surface/80 px-2 py-1 text-xs text-ink-muted">
+        <p
+          className={[
+            // Below the header, which floats over the top of the picture.
+            "absolute top-12 left-3 rounded-md bg-surface/80 px-2 py-1 text-xs text-ink-muted",
+            chromeClassName(chrome.idle),
+          ].join(" ")}
+        >
           sem áudio nesta transmissão
         </p>
       )}
 
+      {/* Never hidden with the rest: it is not decoration but the one thing
+          standing between the viewer and any sound at all. */}
       {audioBlocked && (
         <button
           type="button"
           onClick={startAudio}
-          className="absolute top-3 left-3 flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink"
+          className="absolute top-12 left-3 flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-sm font-semibold text-accent-ink"
         >
           <SpeakerIcon />
           Clique para ouvir
@@ -162,7 +185,13 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
       )}
 
       {audioTrack$ !== null && !audioBlocked && (
-        <label className="absolute right-3 bottom-3 flex items-center gap-2 rounded-md bg-surface/80 px-3 py-1.5 text-xs text-ink-muted">
+        <label
+          {...chrome.holdProps}
+          className={[
+            "absolute right-3 bottom-3 flex items-center gap-2 rounded-md bg-surface/80 px-3 py-1.5 text-xs text-ink-muted",
+            chromeClassName(chrome.idle),
+          ].join(" ")}
+        >
           <SpeakerIcon />
           <input
             type="range"
@@ -209,6 +238,11 @@ function WatchGate({ nickname, onWatch }: { nickname: string; onWatch: () => voi
  * the button that got us here is the one that has to take us back, and it can
  * only do that while it is still on screen. The volume slider comes along for
  * the same reason.
+ *
+ * The header floats over the picture rather than standing above it. Hiding one
+ * that holds its own space leaves a band of empty interface across the top of
+ * the screen, which reads as a fault rather than as the picture being left
+ * alone.
  */
 function Tile({
   label,
@@ -224,37 +258,52 @@ function Tile({
 }) {
   const frameRef = useRef<HTMLDivElement>(null)
   const { isFullscreen, toggle } = useFullscreen(frameRef)
+  const { idle, holdProps } = usePointerIdle(frameRef, isFullscreen)
+
+  // A tile with no picture has nothing to uncover, and taking the name away
+  // from under a cursor aiming at the button below it helps nobody.
+  const hidden = fullscreenable && idle
 
   const fullscreenLabel = isFullscreen ? "Sair da tela cheia" : "Tela cheia"
 
   return (
-    <div
-      ref={frameRef}
-      className={[
-        "flex min-h-0 flex-col",
-        frameClassName,
-        isFullscreen ? fullscreenFrameClassName : "",
-      ].join(" ")}
-    >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-edge px-3 py-2">
-        <span className="truncate text-sm font-medium">{label}</span>
-        <div className="flex shrink-0 items-center gap-1">
-          {action}
-          {fullscreenable && (
-            <button
-              type="button"
-              onClick={toggle}
-              aria-label={fullscreenLabel}
-              title={fullscreenLabel}
-              className={headerButtonClassName}
-            >
-              {isFullscreen ? <ExitFullscreenIcon /> : <EnterFullscreenIcon />}
-            </button>
-          )}
+    <TileChrome.Provider value={{ idle: hidden, holdProps }}>
+      <div
+        ref={frameRef}
+        className={[
+          "relative flex min-h-0 flex-col",
+          frameClassName,
+          isFullscreen ? fullscreenFrameClassName : "",
+          hidden ? "cursor-none" : "",
+        ].join(" ")}
+      >
+        <div
+          {...holdProps}
+          className={[
+            "absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-2 px-3 py-2",
+            "bg-surface/70 backdrop-blur-sm",
+            chromeClassName(hidden),
+          ].join(" ")}
+        >
+          <span className="truncate text-sm font-medium">{label}</span>
+          <div className="flex shrink-0 items-center gap-1">
+            {action}
+            {fullscreenable && (
+              <button
+                type="button"
+                onClick={toggle}
+                aria-label={fullscreenLabel}
+                title={fullscreenLabel}
+                className={headerButtonClassName}
+              >
+                {isFullscreen ? <ExitFullscreenIcon /> : <EnterFullscreenIcon />}
+              </button>
+            )}
+          </div>
         </div>
+        <div className="min-h-0 flex-1">{children}</div>
       </div>
-      <div className="min-h-0 flex-1">{children}</div>
-    </div>
+    </TileChrome.Provider>
   )
 }
 
