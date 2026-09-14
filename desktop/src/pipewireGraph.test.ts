@@ -5,9 +5,11 @@ import {
   appsForMode,
   audioApps,
   isExcludedFromBroadcast,
+  linksInto,
   nodeIdByName,
   pairPorts,
   portsOf,
+  wiringFor,
 } from "./pipewireGraph"
 
 function node(id: number, props: Record<string, unknown>): PipewireObject {
@@ -20,6 +22,14 @@ function client(id: number, props: Record<string, unknown>): PipewireObject {
 
 function port(id: number, props: Record<string, unknown>): PipewireObject {
   return { id, type: "PipeWire:Interface:Port", info: { props } }
+}
+
+function link(id: number, output: number, input: number): PipewireObject {
+  return {
+    id,
+    type: "PipeWire:Interface:Link",
+    info: { props: { "link.output.port": output, "link.input.port": input } },
+  }
 }
 
 /** Shaped after a real `pw-dump`: a player, its client, a sink, and their ports. */
@@ -221,5 +231,65 @@ describe("appsForMode", () => {
 
   it("never lets Discord through, even when its pid is ticked", () => {
     expect(appsForMode(apps, { kind: "include", pids: [2222] })).toEqual([])
+  })
+})
+
+describe("linksInto", () => {
+  it("reads the links landing on the node, as the pairs that made them", () => {
+    const wired = [...graph(), link(700, 167, 501), link(701, 131, 502)]
+    expect(linksInto(wired, 500)).toEqual([
+      [167, 501],
+      [131, 502],
+    ])
+  })
+
+  // The recorder's link leaves the sink's monitor and lands on the recorder,
+  // and a pass that mistook it for an application's would tear out the capture.
+  it("ignores links that only leave the node", () => {
+    const wired = [
+      ...graph(),
+      port(900, { "node.id": 500, "port.direction": "out" }),
+      link(702, 900, 62),
+    ]
+    expect(linksInto(wired, 500)).toEqual([])
+  })
+
+  it("has nothing to say about a node that is not there", () => {
+    expect(linksInto(graph(), null)).toEqual([])
+  })
+})
+
+describe("wiringFor", () => {
+  it("wires nothing in 'none'", () => {
+    expect(wiringFor(graph(), { kind: "none" }, "gorila", null)).toEqual([])
+  })
+
+  it("wires the default sink's monitor in 'system'", () => {
+    expect(wiringFor(graph(), { kind: "system" }, "gorila", "alsa_output.analog")).toEqual([
+      [63, 501],
+    ])
+  })
+
+  // Without the name there is no monitor to take, and wiring the wrong device
+  // would broadcast a silent one.
+  it("wires nothing in 'system' when the default sink is unknown", () => {
+    expect(wiringFor(graph(), { kind: "system" }, "gorila", null)).toEqual([])
+  })
+
+  it("wires each playing application, channel by channel", () => {
+    expect(wiringFor(graph(), { kind: "everything" }, "gorila", null)).toEqual([
+      [131, 502],
+      [167, 501],
+    ])
+  })
+
+  it("never wires what must stay out", () => {
+    expect(wiringFor(graph(), { kind: "include", pids: [2222] }, "gorila", null)).toEqual([])
+  })
+
+  // Our sink is loaded before anything is wired to it; asking too early has to
+  // come back empty rather than pair against whatever else is in the graph.
+  it("wires nothing when our sink is not in the graph", () => {
+    expect(wiringFor(graph(), { kind: "everything" }, "outro", null)).toEqual([])
   })
 })

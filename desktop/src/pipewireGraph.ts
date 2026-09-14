@@ -227,3 +227,76 @@ export function appsForMode(apps: AudioApp[], mode: AudioMode): AudioApp[] {
       return []
   }
 }
+
+/**
+ * The links landing on one node, as the port pairs that made them.
+ *
+ * The graph is what says which links exist, never a list kept on our side. A
+ * player creates a NODE PER STREAM and takes it down when the sound ends, and
+ * its ports — and every link against them — go with it. Bookkeeping of our own
+ * would drift from that in silence; asking the graph cannot.
+ */
+export function linksInto(graph: PipewireObject[], nodeId: number | null): PortPair[] {
+  if (nodeId === null) return []
+
+  const inputs = new Set(portsOf(graph, nodeId, "in").map((port) => port.id))
+  const pairs: PortPair[] = []
+
+  for (const object of graph) {
+    if (!isType(object, "Link")) continue
+
+    const linkProps = props(object)
+    const output = readNumber(linkProps["link.output.port"])
+    const input = readNumber(linkProps["link.input.port"])
+    if (output === null || input === null) continue
+    if (!inputs.has(input)) continue
+
+    pairs.push([output, input])
+  }
+
+  return pairs
+}
+
+/**
+ * Every link a mode asks for, against the graph of this instant.
+ *
+ * A mode is a standing intention, not something applied once when it is picked:
+ * the applications it names come and go, and so do their ports. Answering it
+ * over and over against a fresh graph is what makes "everything" also mean the
+ * game opened five minutes into the broadcast.
+ *
+ * `defaultSinkName` is only read in "system" — the name has to come from
+ * `pactl`, and keeping the call outside leaves this a pure function.
+ */
+export function wiringFor(
+  graph: PipewireObject[],
+  mode: AudioMode,
+  sinkName: string,
+  defaultSinkName: string | null,
+): PortPair[] {
+  const destination = portsOf(graph, nodeIdByName(graph, sinkName), "in")
+  if (destination.length === 0) return []
+
+  switch (mode.kind) {
+    case "none":
+      return []
+    case "system": {
+      // The default sink's monitor carries everything, us included — which is
+      // why this is the only mode that can echo, and the only one that warns.
+      if (defaultSinkName === null) return []
+      const monitors = portsOf(graph, nodeIdByName(graph, defaultSinkName), "out")
+      return pairPorts(monitors, destination)
+    }
+    case "include":
+    case "everything": {
+      const pairs: PortPair[] = []
+      for (const app of appsForMode(audioApps(graph), mode)) {
+        pairs.push(...pairPorts(portsOf(graph, app.nodeId, "out"), destination))
+      }
+      return pairs
+    }
+    default:
+      // Unreachable: every AudioMode variant is handled above.
+      return []
+  }
+}

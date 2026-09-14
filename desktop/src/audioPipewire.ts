@@ -4,11 +4,12 @@ import type { AudioMode } from "./audioMode"
 import {
   type PipewireObject,
   type PortPair,
-  appsForMode,
   audioApps,
+  linksInto,
   nodeIdByName,
   pairPorts,
   portsOf,
+  wiringFor,
 } from "./pipewireGraph"
 
 const run = promisify(execFile)
@@ -57,6 +58,21 @@ const SOURCE_ID = "pipewire"
  */
 const LINK_TIMEOUT_MS = 1000
 
+/**
+ * How often the wiring is compared against the graph while a mode is on.
+ *
+ * A mode is a standing intention, and nothing announces an application that
+ * starts playing after it was picked. Worse, links are made against PORT IDS: a
+ * player opens a node per stream and destroys it when the sound ends, so the
+ * ports a link was made against stop existing the moment a video does — the
+ * wiring decays on its own even with nobody touching anything.
+ *
+ * This is the ceiling on how late a game opened mid-broadcast becomes audible.
+ * A `pw-dump` costs a few milliseconds, and the panel already asks for one at a
+ * comparable rhythm.
+ */
+const RECONCILE_MS = 2000
+
 /** Long enough for a graph change to settle, short enough not to be felt. */
 const SETTLE_POLL_MS = 50
 const SETTLE_ATTEMPTS = 60
@@ -70,7 +86,11 @@ let deliver: ((sourceId: string, pcm: Buffer) => void) | null = null
 
 let recorder: ChildProcess | null = null
 let sinkModule: string | null = null
-let links: PortPair[] = []
+
+/** What the wiring is brought back to on every pass. */
+let activeMode: AudioMode = { kind: "none" }
+let reconciler: NodeJS.Timeout | null = null
+let reconciling = false
 
 async function dump(): Promise<PipewireObject[]> {
   const { stdout } = await run("pw-dump", [], { maxBuffer: 64 * 1024 * 1024 })
@@ -120,24 +140,30 @@ async function ensureSink(): Promise<void> {
   sinkModule = stdout.trim()
 }
 
+/** The device sound normally comes out of, by node name. */
+async function defaultSinkName(): Promise<string | null> {
+  const { stdout } = await run("pactl", ["get-default-sink"]).catch(() => ({ stdout: "" }))
+  const name = stdout.trim()
+  return name.length > 0 ? name : null
+}
+
 async function unloadSink(): Promise<void> {
   if (sinkModule === null) return
   // Leaving it behind puts a phantom audio device on the person's machine that
-  // outlives the app.
+  // outlives the app. Unloading takes the node, and with it every link into it,
+  // so the per-application wiring needs no separate teardown.
   await run("pactl", ["unload-module", sinkModule]).catch(() => undefined)
   sinkModule = null
 }
 
-/** Tears down only the per-application links; the recorder's own stay. */
-async function unlinkApps(): Promise<void> {
+async function unlink(pairs: PortPair[]): Promise<void> {
   await Promise.all(
-    links.map(([output, input]) =>
+    pairs.map(([output, input]) =>
       run("pw-link", ["-d", String(output), String(input)], {
         timeout: LINK_TIMEOUT_MS,
       }).catch(() => undefined),
     ),
   )
-  links = []
 }
 
 /**
@@ -146,20 +172,68 @@ async function unlinkApps(): Promise<void> {
  * In a queue a single silent application holds the ceiling of everyone behind
  * it, and "everything but Discord" links the whole list.
  */
-async function link(pairs: PortPair[], remember = true): Promise<void> {
+async function link(pairs: PortPair[]): Promise<void> {
   await Promise.all(
-    pairs.map(async ([output, input]) => {
-      try {
-        await run("pw-link", [String(output), String(input)], { timeout: LINK_TIMEOUT_MS })
-      } catch (cause) {
+    pairs.map(([output, input]) =>
+      run("pw-link", [String(output), String(input)], { timeout: LINK_TIMEOUT_MS }).catch(
         // Killed by the ceiling: the link exists and counts, it just has not
         // activated. Any other failure means the application closed between the
-        // dump and the link, and there is nothing to undo.
-        if ((cause as { killed?: boolean }).killed !== true) return
-      }
-      if (remember) links.push([output, input])
-    }),
+        // dump and the link, and there is nothing to undo. Either way the next
+        // pass reads the truth off the graph.
+        () => undefined,
+      ),
+    ),
   )
+}
+
+/**
+ * Brings the sink's inbound links back to what the mode asks for.
+ *
+ * Both sides come from the same fresh graph: what is wired, and what should be.
+ * Neither is remembered between passes — a list kept here would go stale the
+ * moment a player closed a stream, and silently.
+ */
+async function reconcile(): Promise<void> {
+  const graph = await dump()
+  const defaultSink = activeMode.kind === "system" ? await defaultSinkName() : null
+
+  const wanted = wiringFor(graph, activeMode, SINK_NAME, defaultSink)
+  // TRADEOFF: every inbound link is taken as ours, so an application routed
+  // into the sink by hand from the system mixer is undone on the next pass.
+  // Sparing those would mean telling them apart from the ones we made.
+  const current = linksInto(graph, nodeIdByName(graph, SINK_NAME))
+
+  const key = ([output, input]: PortPair): string => `${output}:${input}`
+  const wantedKeys = new Set(wanted.map(key))
+  const currentKeys = new Set(current.map(key))
+
+  await unlink(current.filter((pair) => !wantedKeys.has(key(pair))))
+  await link(wanted.filter((pair) => !currentKeys.has(key(pair))))
+}
+
+function startReconciling(): void {
+  if (reconciler !== null) return
+
+  reconciler = setInterval(() => {
+    // A pass still running holds the next one: `pw-dump` on a busy graph can
+    // outlast the interval, and two passes at once would each read the other's
+    // half-made wiring and undo it.
+    if (reconciling) return
+    reconciling = true
+    void reconcile()
+      // A failed pass is not worth reporting: the next one is two seconds away
+      // and reads the graph afresh.
+      .catch(() => undefined)
+      .finally(() => {
+        reconciling = false
+      })
+  }, RECONCILE_MS)
+}
+
+function stopReconciling(): void {
+  if (reconciler === null) return
+  clearInterval(reconciler)
+  reconciler = null
 }
 
 /** Polls until `check` is satisfied, or gives up with what it last saw. */
@@ -226,9 +300,9 @@ async function ensureRecorder(): Promise<void> {
     )
   }
 
-  // The recorder's own link is permanent: it is not part of what a change of
-  // mode undoes.
-  await link(pairs, false)
+  // This link lands on the recorder, not on the sink, so no reconciliation pass
+  // ever sees it: it is made once and stays for as long as the recorder does.
+  await link(pairs)
 }
 
 /** The recorder's node, found by the pid we spawned. */
@@ -266,42 +340,30 @@ export async function setMode(
   onPcm: (sourceId: string, pcm: Buffer) => void,
 ): Promise<string[]> {
   deliver = onPcm
+  activeMode = mode
 
   if (mode.kind === "none") {
-    await unlinkApps()
+    stopReconciling()
+    await reconcile()
     return []
   }
 
   await ensureRecorder()
-  await unlinkApps()
+  await reconcile()
+  startReconciling()
 
-  const graph = await dump()
-  const destination = portsOf(graph, nodeIdByName(graph, SINK_NAME), "in")
-
-  if (mode.kind === "system") {
-    // The default sink's monitor carries everything, us included — which is
-    // why this is the only mode that can echo, and the only one that warns.
-    const { stdout } = await run("pactl", ["get-default-sink"])
-    const defaultSink = nodeIdByName(graph, stdout.trim())
-    if (defaultSink === null) return []
-    await link(pairPorts(portsOf(graph, defaultSink, "out"), destination))
-    return [SOURCE_ID]
-  }
-
-  const pairs: PortPair[] = []
-  for (const app of appsForMode(audioApps(graph), mode)) {
-    pairs.push(...pairPorts(portsOf(graph, app.nodeId, "out"), destination))
-  }
-  await link(pairs)
-
-  // A link still in `init` counts: it activates by itself when the application
-  // makes sound again, and the worklet has to exist before that happens.
-  return pairs.length > 0 ? [SOURCE_ID] : []
+  // The id is returned even with nothing wired yet. There is one recorder and
+  // one id whatever is linked behind it, and the worklet has to exist BEFORE
+  // the first application does: built only when something happens to be playing
+  // at this instant, a broadcast started in silence stays silent for good, and
+  // every sample of whoever starts playing next is dropped without a word.
+  return [SOURCE_ID]
 }
 
 /** Tears everything down. Called when the app quits. */
 export async function stop(): Promise<void> {
-  await unlinkApps()
+  stopReconciling()
+  activeMode = { kind: "none" }
   recorder?.kill()
   recorder = null
   deliver = null
