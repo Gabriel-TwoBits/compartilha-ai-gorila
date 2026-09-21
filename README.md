@@ -400,6 +400,15 @@ it on: its pure logic is covered by tests, the rest is waiting for a real one.
    `CompartilhaAiGorila-instalador.exe`). Those are what the download buttons
    point at, so a link handed out once keeps working. An app already installed
    never uses them — the updater follows the feed to the versioned file.
+6. **`pnpm ship`.** The room runs on a different machine than the one that
+   builds, so a release sitting in a local `release/` has been published to
+   nobody. This sends the tree — installers and server code both — and restarts
+   the service, then checks the feed answers `200` before reporting success.
+   `desktop/` stays behind: its 2.6 G of build tree has no use there, and
+   `release/` is its only product that matters.
+
+The SSH destination is `server` from `~/.ssh/config`; `GORILA_REMOTE` overrides
+it. Nothing else in the repository names the host.
 
 **The `.blockmap` has to go up too.** Without it there is no differential
 download and every update pulls the whole ~100 MB again, which is exactly what
