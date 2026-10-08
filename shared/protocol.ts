@@ -15,11 +15,20 @@ export type TrackRef = {
 }
 
 /**
- * An in-progress broadcast. Audio is optional: the browser only hands over an
- * audio track when the user ticks "share audio" in the screen picker.
+ * An in-progress broadcast: the screen, the camera, or both, plus optional audio.
+ *
+ * An address is present only while its track carries real media. The publisher
+ * keeps an idle video track on a black placeholder so turning it on is a
+ * `replaceTrack` rather than a renegotiation, but a viewer must never pull that
+ * placeholder: a still canvas yields a single frame and the SFU never finishes
+ * delivering it, so the viewer's renegotiation hangs without an error.
+ *
+ * At least one of `screen` and `camera` is always set; with neither there is no
+ * broadcast, only `null`.
  */
 export type Broadcast = {
-  video: TrackRef
+  screen: TrackRef | null
+  camera: TrackRef | null
   audio: TrackRef | null
 }
 
@@ -50,7 +59,7 @@ export type ServerMessage = {
 
 /** Client to server. */
 export type ClientMessage =
-  | { type: "broadcast-start"; video: TrackRef; audio: TrackRef | null }
+  | ({ type: "broadcast-start" } & Broadcast)
   | { type: "broadcast-stop" }
   /** Whose broadcasts we currently have open, empty when showing none. */
   | { type: "watching"; nicknames: string[] }
@@ -65,6 +74,18 @@ function parseTrackRef(value: unknown): TrackRef | null {
   if (typeof sessionId !== "string" || sessionId.length === 0) return null
   if (typeof trackName !== "string" || trackName.length === 0) return null
   return { sessionId, trackName }
+}
+
+/**
+ * An address that may legitimately be absent. A missing or `null` value is
+ * `{ ref: null }`; a malformed one is `null`, so the caller drops the whole
+ * message rather than publishing a half-valid state.
+ */
+function parseOptionalTrackRef(value: unknown): { ref: TrackRef | null } | null {
+  if (value === null || value === undefined) return { ref: null }
+  const ref = parseTrackRef(value)
+  if (ref === null) return null
+  return { ref }
 }
 
 /**
@@ -84,16 +105,13 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
   switch (parsed.type) {
     case "broadcast-start": {
-      const video = parseTrackRef(parsed.video)
-      if (video === null) return null
-      // A missing audio track is legitimate; a malformed one is not, and drops
-      // the whole message rather than silently publishing a half-valid state.
-      if (parsed.audio === null || parsed.audio === undefined) {
-        return { type: "broadcast-start", video, audio: null }
-      }
-      const audio = parseTrackRef(parsed.audio)
-      if (audio === null) return null
-      return { type: "broadcast-start", video, audio }
+      const screen = parseOptionalTrackRef(parsed.screen)
+      const camera = parseOptionalTrackRef(parsed.camera)
+      const audio = parseOptionalTrackRef(parsed.audio)
+      if (screen === null || camera === null || audio === null) return null
+      // Audio alone is nothing to watch.
+      if (screen.ref === null && camera.ref === null) return null
+      return { type: "broadcast-start", screen: screen.ref, camera: camera.ref, audio: audio.ref }
     }
     case "broadcast-stop":
       return { type: "broadcast-stop" }

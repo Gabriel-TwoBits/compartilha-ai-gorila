@@ -165,7 +165,8 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
         }
         const message: ClientMessage = {
           type: "broadcast-start",
-          video,
+          screen: video,
+          camera: null,
           audio: toTrackRef(audioMeta),
         }
         setStep("announcing")

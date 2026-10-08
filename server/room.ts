@@ -1,4 +1,4 @@
-import type { Broadcast, Participant } from "@shared/protocol"
+import type { Broadcast, Participant, TrackRef } from "@shared/protocol"
 
 /**
  * The single room, held in memory, keyed by nickname.
@@ -62,9 +62,10 @@ export function leave(connectionId: string, nickname: string): void {
 }
 
 /**
- * Records a broadcast. A participant broadcasting from a second connection
- * replaces the first, matching what a viewer would see anyway: one screen per
- * person.
+ * Records a broadcast, or its update when the camera or the screen turns on or
+ * off mid-broadcast. A participant broadcasting from a second connection
+ * replaces the first, matching what a viewer would see anyway: one broadcast
+ * per person.
  */
 export function startBroadcast(connectionId: string, nickname: string, broadcast: Broadcast): void {
   const entry = participants.get(nickname)
@@ -91,12 +92,18 @@ export function setWatching(nickname: string, watching: string[]): void {
   entry.watching = new Set(watching)
 }
 
+function copyTrackRef(ref: TrackRef | null): TrackRef | null {
+  if (ref === null) return null
+  return { ...ref }
+}
+
 function copyBroadcast(broadcast: Broadcast | null): Broadcast | null {
   if (broadcast === null) return null
-  if (broadcast.audio === null) {
-    return { video: { ...broadcast.video }, audio: null }
+  return {
+    screen: copyTrackRef(broadcast.screen),
+    camera: copyTrackRef(broadcast.camera),
+    audio: copyTrackRef(broadcast.audio),
   }
-  return { video: { ...broadcast.video }, audio: { ...broadcast.audio } }
 }
 
 /**

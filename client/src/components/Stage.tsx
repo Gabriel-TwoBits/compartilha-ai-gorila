@@ -11,7 +11,7 @@ import {
 import { type TrackMetadata, createAudioSink } from "partytracks/client"
 import { useObservable } from "partytracks/react"
 import { type Observable, of } from "rxjs"
-import type { Broadcast, Participant } from "@shared/protocol"
+import type { Broadcast, Participant, TrackRef } from "@shared/protocol"
 import { useFullscreen } from "../fullscreen"
 import { TileChrome, usePointerIdle } from "../pointerIdle"
 import { getScreenshareSource, getWatchTracks } from "../tracks"
@@ -89,7 +89,7 @@ function LocalPreview() {
   return <video ref={videoRef} autoPlay playsInline muted className={videoClassName} />
 }
 
-function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
+function RemoteBroadcast({ broadcast, screen }: { broadcast: Broadcast; screen: TrackRef }) {
   const partyTracks = getWatchTracks()
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -104,7 +104,7 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
   // Deps are the primitive parts of the address: the objects arrive fresh from
   // JSON on every room snapshot, so memoizing on them would rebuild the pull on
   // every render.
-  const { sessionId: videoSession, trackName: videoTrack } = broadcast.video
+  const { sessionId: videoSession, trackName: videoTrack } = screen
   const audioSession = broadcast.audio?.sessionId ?? null
   const audioTrack = broadcast.audio?.trackName ?? null
 
@@ -405,6 +405,7 @@ export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
 
         // The caller filters these out; the type still admits one.
         if (broadcast === null) return null
+        if (broadcast.screen === null) return null
 
         // Our own screen comes from the local capture, so there is nothing to
         // open and nothing to stop paying for.
@@ -433,8 +434,9 @@ export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
           >
             {/* Keyed on the address so a republished track remounts with fresh pulls. */}
             <RemoteBroadcast
-              key={`${broadcast.video.sessionId}/${broadcast.video.trackName}`}
+              key={`${broadcast.screen.sessionId}/${broadcast.screen.trackName}`}
               broadcast={broadcast}
+              screen={broadcast.screen}
             />
           </Tile>
         )

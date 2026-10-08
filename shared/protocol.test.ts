@@ -1,26 +1,60 @@
 import { describe, expect, it } from "vitest"
 import { MAX_NICKNAME_LENGTH, normalizeNickname, parseClientMessage, parseServerMessage } from "./protocol"
 
-const videoRef = { sessionId: "session-a", trackName: "screen-video" }
+const screenRef = { sessionId: "session-a", trackName: "screen-video" }
+const cameraRef = { sessionId: "session-a", trackName: "camera-video" }
 const audioRef = { sessionId: "session-a", trackName: "screen-audio" }
 
 describe("parseClientMessage", () => {
-  it("accepts a broadcast with audio", () => {
-    const raw = JSON.stringify({ type: "broadcast-start", video: videoRef, audio: audioRef })
+  it("accepts a broadcast with screen, camera and audio", () => {
+    const raw = JSON.stringify({
+      type: "broadcast-start",
+      screen: screenRef,
+      camera: cameraRef,
+      audio: audioRef,
+    })
     expect(parseClientMessage(raw)).toEqual({
       type: "broadcast-start",
-      video: videoRef,
+      screen: screenRef,
+      camera: cameraRef,
       audio: audioRef,
     })
   })
 
-  it("accepts a broadcast without audio", () => {
-    const withNull = JSON.stringify({ type: "broadcast-start", video: videoRef, audio: null })
-    const withoutKey = JSON.stringify({ type: "broadcast-start", video: videoRef })
-    const expected = { type: "broadcast-start", video: videoRef, audio: null }
+  it("treats a missing address the same as a null one", () => {
+    const withNull = JSON.stringify({
+      type: "broadcast-start",
+      screen: screenRef,
+      camera: null,
+      audio: null,
+    })
+    const withoutKey = JSON.stringify({ type: "broadcast-start", screen: screenRef })
+    const expected = { type: "broadcast-start", screen: screenRef, camera: null, audio: null }
 
     expect(parseClientMessage(withNull)).toEqual(expected)
     expect(parseClientMessage(withoutKey)).toEqual(expected)
+  })
+
+  it("accepts a broadcast of the camera alone", () => {
+    const raw = JSON.stringify({ type: "broadcast-start", camera: cameraRef, audio: audioRef })
+    expect(parseClientMessage(raw)).toEqual({
+      type: "broadcast-start",
+      screen: null,
+      camera: cameraRef,
+      audio: audioRef,
+    })
+  })
+
+  it("drops a broadcast with nothing to watch", () => {
+    const cases = [
+      { type: "broadcast-start" },
+      { type: "broadcast-start", screen: null, camera: null },
+      { type: "broadcast-start", audio: audioRef },
+    ]
+
+    for (const value of cases) {
+      expect(parseClientMessage(JSON.stringify(value)), JSON.stringify(value)).toBeNull()
+    }
   })
 
   it("accepts a stop", () => {
@@ -41,23 +75,24 @@ describe("parseClientMessage", () => {
     expect(parseClientMessage(JSON.stringify({}))).toBeNull()
   })
 
-  it("drops a broadcast whose video address is incomplete", () => {
-    const cases = [
-      { type: "broadcast-start" },
-      { type: "broadcast-start", video: {} },
-      { type: "broadcast-start", video: { sessionId: "session-a" } },
-      { type: "broadcast-start", video: { sessionId: "", trackName: "screen-video" } },
-      { type: "broadcast-start", video: { sessionId: 1, trackName: "screen-video" } },
+  it("drops a broadcast with any malformed address rather than treating it as absent", () => {
+    const malformed = [
+      {},
+      { sessionId: "session-a" },
+      { sessionId: "", trackName: "screen-video" },
+      { sessionId: 1, trackName: "screen-video" },
     ]
 
-    for (const value of cases) {
-      expect(parseClientMessage(JSON.stringify(value)), JSON.stringify(value)).toBeNull()
+    for (const bad of malformed) {
+      const cases = [
+        { type: "broadcast-start", screen: bad, camera: cameraRef },
+        { type: "broadcast-start", screen: screenRef, camera: bad },
+        { type: "broadcast-start", screen: screenRef, audio: bad },
+      ]
+      for (const value of cases) {
+        expect(parseClientMessage(JSON.stringify(value)), JSON.stringify(value)).toBeNull()
+      }
     }
-  })
-
-  it("drops a broadcast whose audio address is malformed rather than treating it as absent", () => {
-    const raw = JSON.stringify({ type: "broadcast-start", video: videoRef, audio: { sessionId: "x" } })
-    expect(parseClientMessage(raw)).toBeNull()
   })
 
   it("accepts a watch report naming several broadcasters", () => {

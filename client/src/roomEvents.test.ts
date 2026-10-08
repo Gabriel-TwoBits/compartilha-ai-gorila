@@ -3,7 +3,8 @@ import type { Broadcast, Participant } from "@shared/protocol"
 import { type RoomSnapshot, roomEvents } from "./roomEvents"
 
 const SOME_BROADCAST: Broadcast = {
-  video: { sessionId: "session", trackName: "video" },
+  screen: { sessionId: "session", trackName: "video" },
+  camera: null,
   audio: null,
 }
 

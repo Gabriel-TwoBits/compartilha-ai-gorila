@@ -11,12 +11,14 @@ import {
 } from "./room"
 
 const broadcast: Broadcast = {
-  video: { sessionId: "session-a", trackName: "screen-video" },
+  screen: { sessionId: "session-a", trackName: "screen-video" },
+  camera: { sessionId: "session-a", trackName: "camera-video" },
   audio: { sessionId: "session-a", trackName: "screen-audio" },
 }
 
 const otherBroadcast: Broadcast = {
-  video: { sessionId: "session-b", trackName: "screen-video" },
+  screen: null,
+  camera: { sessionId: "session-b", trackName: "camera-video" },
   audio: null,
 }
 
@@ -145,9 +147,11 @@ describe("broadcasts", () => {
 
     const taken = snapshot()[0]?.broadcast
     if (taken === null || taken === undefined) throw new Error("expected a broadcast")
-    taken.video.trackName = "tampered"
+    if (taken.screen === null || taken.camera === null) throw new Error("expected both tracks")
+    taken.screen.trackName = "tampered"
+    taken.camera.trackName = "tampered"
 
-    expect(snapshot()[0]?.broadcast?.video.trackName).toBe("screen-video")
+    expect(snapshot()[0]?.broadcast).toEqual(broadcast)
   })
 })
 

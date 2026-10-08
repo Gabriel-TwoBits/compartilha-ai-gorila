@@ -54,7 +54,11 @@ function publishRoomState(): void {
 function applyMessage(id: string, nickname: string, message: ClientMessage): void {
   switch (message.type) {
     case "broadcast-start":
-      room.startBroadcast(id, nickname, { video: message.video, audio: message.audio })
+      room.startBroadcast(id, nickname, {
+        screen: message.screen,
+        camera: message.camera,
+        audio: message.audio,
+      })
       return
     case "broadcast-stop":
       room.stopBroadcast(id, nickname)
