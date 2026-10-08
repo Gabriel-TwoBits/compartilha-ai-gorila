@@ -1,5 +1,20 @@
 import { Observable } from "rxjs"
 
+/**
+ * Every placeholder track handed out, ours and partytracks' alike.
+ *
+ * Marked rather than recognised by type: Chromium makes a canvas capture a
+ * `CanvasCaptureMediaStreamTrack` with a `canvas` property, but Firefox hands
+ * over a plain `MediaStreamTrack` and keeps `canvas` on the stream. Guessing
+ * from the track announced the placeholder as a screen there, which showed as a
+ * black overlay and left viewers pulling a track that never delivers.
+ */
+const placeholders = new WeakSet<MediaStreamTrack>()
+
+export function markPlaceholder(track: MediaStreamTrack): void {
+  placeholders.add(track)
+}
+
 /** As small as an encoder accepts: nothing is ever meant to see it. */
 const PLACEHOLDER_SIZE_PX = 2
 
@@ -43,6 +58,7 @@ export function placeholderVideoTrack$(): Observable<MediaStreamTrack> {
       return undefined
     }
 
+    markPlaceholder(track)
     const paint = () => context.fillRect(0, 0, PLACEHOLDER_SIZE_PX, PLACEHOLDER_SIZE_PX)
     paint()
     const timer = window.setInterval(paint, REPAINT_INTERVAL_MS)
@@ -55,11 +71,7 @@ export function placeholderVideoTrack$(): Observable<MediaStreamTrack> {
   })
 }
 
-/**
- * True for a canvas track — ours, or the black one partytracks swaps in while a
- * browser screen share is idle. A real capture is never one, so this tells the
- * two apart without bookkeeping.
- */
+/** True for a track marked by `markPlaceholder`; a real capture never is. */
 export function isPlaceholder(track: MediaStreamTrack): boolean {
-  return "canvas" in track
+  return placeholders.has(track)
 }

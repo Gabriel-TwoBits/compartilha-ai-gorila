@@ -11,11 +11,12 @@ import {
   startWith,
   switchMap,
   tap,
+  withLatestFrom,
 } from "rxjs"
 import type { ClientMessage } from "@shared/protocol"
 import { audioSourceId$, audioSourceTrack$ } from "./audioSource"
 import { cameraError$, cameraOn$, cameraTrack$, toggleCamera, turnCameraOff } from "./camera"
-import { isPlaceholder, placeholderVideoTrack$ } from "./placeholder"
+import { isPlaceholder, markPlaceholder, placeholderVideoTrack$ } from "./placeholder"
 import {
   applyQualityToTrack,
   getBroadcastTracks,
@@ -26,9 +27,6 @@ import {
 } from "./tracks"
 import { CAMERA_PRESET, quality$, sendEncodings } from "./quality"
 import type { Signaling } from "./useSignaling"
-
-/** `useObservable` demands an observer; here the subscription itself is the point. */
-function ignore(): void {}
 
 /**
  * What the broadcast is waiting on, shown on the stage while it assembles.
@@ -153,7 +151,17 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
   // toggling flips a flag nothing reads, the screen picker never opens and the
   // effect below never runs. This keeps it warm — while idle it emits a local
   // black canvas and touches neither the capture APIs nor the network.
-  useObservable(screenshare.video.broadcastTrack$, ignore)
+  //
+  // That black canvas is marked here as a placeholder. partytracks flips
+  // `isBroadcasting$` before emitting, so a track arriving while it reads false
+  // is the idle one; the desktop source emits nothing while idle.
+  const screenWithState$ = useMemo(
+    () => screenshare.video.broadcastTrack$.pipe(withLatestFrom(screenshare.isBroadcasting$)),
+    [screenshare],
+  )
+  useObservable(screenWithState$, ([track, sharing]) => {
+    if (!sharing) markPlaceholder(track)
+  })
 
   /** What the room was last told, so a reconnect can repeat it. */
   const announcement = useRef<ClientMessage | null>(null)
