@@ -453,8 +453,12 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
   const screenTrack = usePulledTrack(useStickyTrackRef(broadcast.screen))
   const cameraTrack = usePulledTrack(useStickyTrackRef(broadcast.camera))
 
-  const audioSession = broadcast.audio?.sessionId ?? null
-  const audioTrack = broadcast.audio?.trackName ?? null
+  // Sticky for the same reason as the video: the audio is announced off while the
+  // screen is, and pulling it again when the screen comes back draws 410 Gone.
+  const audioAddress = useStickyTrackRef(broadcast.audio)
+  const audioOn = broadcast.audio !== null
+  const audioSession = audioAddress?.sessionId ?? null
+  const audioTrack = audioAddress?.trackName ?? null
 
   const audioTrack$ = useMemo(() => {
     if (audioSession === null || audioTrack === null) return null
@@ -525,7 +529,7 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
       />
       <audio ref={audioRef} />
 
-      {audioTrack$ === null && (
+      {!audioOn && (
         <p
           className={[
             // Below the header, which floats over the top of the picture.
@@ -539,7 +543,7 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
 
       {/* Never hidden with the rest: it is not decoration but the one thing
           standing between the viewer and any sound at all. */}
-      {audioBlocked && (
+      {audioOn && audioBlocked && (
         <button
           type="button"
           onClick={startAudio}
@@ -550,7 +554,7 @@ function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
         </button>
       )}
 
-      {audioTrack$ !== null && !audioBlocked && (
+      {audioOn && !audioBlocked && (
         <div
           {...chrome.holdProps}
           className={[

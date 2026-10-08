@@ -16,7 +16,12 @@ import {
 import type { ClientMessage } from "@shared/protocol"
 import { audioSourceId$, audioSourceTrack$ } from "./audioSource"
 import { cameraError$, cameraOn$, cameraTrack$, toggleCamera, turnCameraOff } from "./camera"
-import { isPlaceholder, markPlaceholder, placeholderVideoTrack$ } from "./placeholder"
+import {
+  isPlaceholder,
+  markPlaceholder,
+  placeholderAudioTrack$,
+  placeholderVideoTrack$,
+} from "./placeholder"
 import {
   applyQualityToTrack,
   getBroadcastTracks,
@@ -221,18 +226,25 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
 
     // Audio is optional and its source is the user's to pick: the screen picker
     // only yields a track when "share audio" is ticked, and on some platforms
-    // never — hence the hand-picked input.
+    // never — hence the hand-picked input. It goes out with the screen only: a
+    // camera on its own carries silence, never the computer's sound.
     //
-    // The `switchMap` sits INSIDE the push on purpose. Outside it, every change
+    // The `switchMap`s sit INSIDE the push on purpose. Outside it, every change
     // of source built a whole new push — a new transceiver and a renegotiation
     // with the SFU, which makes the video of everyone watching flicker. Inside,
     // `push` replaces the track on the transceiver it already has, and nobody
     // watching notices. `startWith` lets the broadcast be announced on video
     // alone, then announced again once audio shows up.
-    const audioSource$ = audioSourceId$.pipe(
-      distinctUntilChanged(),
-      switchMap((sourceId) => audioSourceTrack$(sourceId, screenshare.audio.broadcastTrack$)),
-      tap((track) => setAudioTrack(track)),
+    const screenOn$ = carriesMedia$(screen$)
+    const audioSource$ = screenOn$.pipe(
+      switchMap((screenOn) => {
+        if (!screenOn) return placeholderAudioTrack$()
+        return audioSourceId$.pipe(
+          distinctUntilChanged(),
+          switchMap((sourceId) => audioSourceTrack$(sourceId, screenshare.audio.broadcastTrack$)),
+        )
+      }),
+      tap((track) => setAudioTrack(isPlaceholder(track) ? null : track)),
     )
     const audio$ = partyTracks.push(audioSource$).pipe(
       startWith(null),
@@ -250,7 +262,7 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
       screenMeta$,
       cameraMeta$,
       audio$,
-      carriesMedia$(screen$),
+      screenOn$,
       carriesMedia$(camera$),
     ]).subscribe({
       next: ([screenMeta, cameraMeta, audioMeta, screenOn, cameraOn]) => {
@@ -276,7 +288,9 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
           type: "broadcast-start",
           screen: screenOn ? screen : null,
           camera: cameraOn ? camera : null,
-          audio: toTrackRef(audioMeta),
+          // Off with the screen, so viewers show the broadcast as silent instead
+          // of a volume slider over nothing.
+          audio: screenOn ? toTrackRef(audioMeta) : null,
         }
         setStep("announcing")
         announcement.current = message

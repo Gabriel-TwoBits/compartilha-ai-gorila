@@ -75,3 +75,43 @@ export function placeholderVideoTrack$(): Observable<MediaStreamTrack> {
 export function isPlaceholder(track: MediaStreamTrack): boolean {
   return placeholders.has(track)
 }
+
+/**
+ * A silent audio track that holds the audio transceiver's place while the screen
+ * is off.
+ *
+ * The broadcast's sound belongs to the screen: a camera alone must not carry the
+ * computer's audio. Swapping the source for silence rather than dropping the
+ * push keeps the transceiver, so the screen coming back is a `replaceTrack`, not
+ * a renegotiation.
+ *
+ * A destination with nothing feeding it yields no frames at all, and partytracks
+ * neither announces a push nor replaces its track until the sender has put bytes
+ * on the wire — so the screen would never get its sound. A constant source at
+ * zero keeps the graph rendering. The broadcast always starts from a click, so
+ * the context is allowed to run.
+ */
+export function placeholderAudioTrack$(): Observable<MediaStreamTrack> {
+  return new Observable<MediaStreamTrack>((subscriber) => {
+    const context = new AudioContext()
+    const destination = context.createMediaStreamDestination()
+    const [track] = destination.stream.getAudioTracks()
+    if (track === undefined) {
+      void context.close()
+      subscriber.error(new Error("o navegador não gerou a trilha de silêncio"))
+      return undefined
+    }
+
+    const silence = context.createConstantSource()
+    silence.offset.value = 0
+    silence.connect(destination)
+    silence.start()
+
+    markPlaceholder(track)
+    subscriber.next(track)
+    return () => {
+      track.stop()
+      void context.close()
+    }
+  })
+}

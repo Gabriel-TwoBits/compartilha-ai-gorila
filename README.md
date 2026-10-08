@@ -177,6 +177,12 @@ browser.
 - **An address is announced only while its track carries real media.** A viewer
   must never pull the placeholder — a still canvas yields almost no frames and
   the SFU never finishes delivering it.
+- **The sound goes out with the screen, never with the camera alone.** While the
+  screen is off the audio track carries silence and is announced as `null`, so
+  a camera does not leak whatever the computer is playing. The silence is a
+  constant source at zero: a Web Audio destination with nothing feeding it
+  yields no frames, and partytracks neither announces a push nor replaces its
+  track until bytes go out — the screen would come back mute.
 - **A viewer keeps a track pulled for the whole broadcast** and only hides it
   while it is announced off. Closing the pull and pulling again when the camera
   came back froze the screen and drew a `410 Gone` from the SFU.
