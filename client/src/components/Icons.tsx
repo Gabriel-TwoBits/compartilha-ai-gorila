@@ -103,6 +103,27 @@ export function ScreenIcon() {
   )
 }
 
+/** A video camera: the face, as opposed to the screen. */
+export function CameraIcon() {
+  return (
+    <Stroked>
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+      <path d="m16 10 6-3v10l-6-3" />
+    </Stroked>
+  )
+}
+
+/** The camera, struck through. */
+export function CameraOffIcon() {
+  return (
+    <Stroked>
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+      <path d="m16 10 6-3v10l-6-3" />
+      <path d="m2 2 20 20" />
+    </Stroked>
+  )
+}
+
 export function SpeakerIcon() {
   return (
     <Stroked>

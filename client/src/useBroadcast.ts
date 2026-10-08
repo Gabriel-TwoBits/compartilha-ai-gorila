@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useObservable, useObservableAsValue } from "partytracks/react"
-import { catchError, combineLatest, distinctUntilChanged, of, startWith, switchMap, tap } from "rxjs"
+import {
+  type Observable,
+  catchError,
+  combineLatest,
+  distinctUntilChanged,
+  map,
+  of,
+  shareReplay,
+  startWith,
+  switchMap,
+  tap,
+} from "rxjs"
 import type { ClientMessage } from "@shared/protocol"
 import { audioSourceId$, audioSourceTrack$ } from "./audioSource"
+import { cameraError$, cameraOn$, cameraTrack$, toggleCamera, turnCameraOff } from "./camera"
+import { isPlaceholder, placeholderVideoTrack$ } from "./placeholder"
 import {
   applyQualityToTrack,
   getBroadcastTracks,
@@ -11,7 +24,7 @@ import {
   toTrackRef,
   videoSendEncodings$,
 } from "./tracks"
-import { quality$ } from "./quality"
+import { CAMERA_PRESET, quality$, sendEncodings } from "./quality"
 import type { Signaling } from "./useSignaling"
 
 /** `useObservable` demands an observer; here the subscription itself is the point. */
@@ -44,6 +57,11 @@ function describePushError(pushError: unknown): string {
   return "falha ao publicar a transmissão"
 }
 
+function describeCameraError(cameraError: Error): string {
+  if (cameraError.name === "NotAllowedError") return "o acesso à câmera foi bloqueado"
+  return `não consegui abrir a câmera: ${cameraError.message}`
+}
+
 /** A failing audio source must not take the broadcast down, but silence needs a reason. */
 function describeAudioError(audioError: unknown): string {
   if (audioError instanceof Error) return `transmitindo sem áudio: ${audioError.message}`
@@ -51,10 +69,18 @@ function describeAudioError(audioError: unknown): string {
 }
 
 export type Broadcasting = {
-  isBroadcasting: boolean
-  /** Last error while acquiring the screen, e.g. the picker being dismissed. */
+  /** Anything of ours on air: the screen, the camera, or both. */
+  isLive: boolean
+  /** The screen share is on, or its picker is open. */
+  isSharingScreen: boolean
+  /** The camera is on, or being opened. */
+  isCameraOn: boolean
+  /** Our own captures while they are on air, for our own tile. */
+  screenTrack: MediaStreamTrack | null
+  cameraTrack: MediaStreamTrack | null
+  /** Last error while acquiring the screen or the camera, e.g. a dismissed picker. */
   error: string | null
-  /** How far along the handshake is, while `isBroadcasting` and not yet `live`. */
+  /** How far along the handshake is, while `isLive` and not yet `live`. */
   step: BroadcastStep
   /**
    * The audio actually going out, or `null` when none is. The level meter reads
@@ -62,26 +88,65 @@ export type Broadcasting = {
    * move when the game makes noise.
    */
   audioTrack: MediaStreamTrack | null
-  toggle: () => void
+  toggleScreen: () => void
+  toggleCamera: () => void
+  /** Takes everything off the air, the camera included. */
+  stop: () => void
 }
 
 /**
- * Publishes our screen to the SFU and announces its track addresses to the room.
+ * A video track that is always present while broadcasting: the source's own
+ * while it is on, a black placeholder while it is off.
  *
- * The push subscription is tied to `isBroadcasting` rather than being permanent:
- * partytracks swaps in an empty placeholder track when not broadcasting, and
- * paying to relay that through Cloudflare for every idle participant would be
- * pure waste.
+ * Keeping the transceiver for the whole broadcast is what lets the screen or the
+ * camera come and go as a `replaceTrack`, invisible to whoever is watching,
+ * rather than as a renegotiation that makes their video flicker.
+ */
+function slot$(
+  on$: Observable<boolean>,
+  source$: Observable<MediaStreamTrack>,
+  prepare: (track: MediaStreamTrack) => void,
+): Observable<MediaStreamTrack> {
+  return on$.pipe(
+    distinctUntilChanged(),
+    switchMap((on) => (on ? source$ : placeholderVideoTrack$())),
+    tap(prepare),
+    // One track, prepared once, for both the push and the flag announcing it.
+    shareReplay({ bufferSize: 1, refCount: true }),
+  )
+}
+
+/** Whether a slot carries real media, which is what makes its address worth pulling. */
+function carriesMedia$(track$: Observable<MediaStreamTrack>): Observable<boolean> {
+  return track$.pipe(
+    map((track) => !isPlaceholder(track)),
+    distinctUntilChanged(),
+  )
+}
+
+const cameraSendEncodings$ = of(sendEncodings(CAMERA_PRESET))
+
+/**
+ * Publishes our screen and camera to the SFU and announces their track
+ * addresses to the room.
+ *
+ * The push subscriptions are tied to being live rather than being permanent:
+ * an idle participant relaying placeholders through Cloudflare would be pure
+ * waste.
  */
 export function useBroadcast(signaling: Signaling): Broadcasting {
   const partyTracks = getBroadcastTracks()
   const screenshare = getScreenshareSource()
   const { send, connected } = signaling
 
-  const isBroadcasting = useObservableAsValue(screenshare.isBroadcasting$, false)
+  const isSharingScreen = useObservableAsValue(screenshare.isBroadcasting$, false)
+  const isCameraOn = useObservableAsValue(cameraOn$, false)
+  const isLive = isSharingScreen || isCameraOn
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<BroadcastStep>("capturing")
   const [audioTrack, setAudioTrack] = useState<MediaStreamTrack | null>(null)
+  const [screenTrack, setScreenTrack] = useState<MediaStreamTrack | null>(null)
+  const [cameraTrack, setCameraTrack] = useState<MediaStreamTrack | null>(null)
 
   // `isBroadcasting$` is only ever fed from inside the `broadcastTrack$`
   // pipeline, and that pipeline is ref-counted: with nobody subscribed,
@@ -100,6 +165,10 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
     setError(screenError.message)
   })
 
+  useObservable(cameraError$, (cameraError) => {
+    setError(describeCameraError(cameraError))
+  })
+
   // Raising the preset mid-broadcast has to reach the capture as well as the
   // encoder. The encoder follows `videoSendEncodings$` on its own; the capture
   // is a device already running, and only `applyConstraints` moves it.
@@ -110,7 +179,7 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
   })
 
   useEffect(() => {
-    if (!isBroadcasting) return undefined
+    if (!isLive) return undefined
 
     setError(null)
     setStep("capturing")
@@ -118,16 +187,29 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
     // The capture is ours to prepare before it is offered: the motion hint has
     // to be on the track before the encoder negotiates, and a preset picked
     // while idle has to reach a capture that was built from an older one.
-    const capture$ = screenshare.video.broadcastTrack$.pipe(
-      tap((track) => {
-        hintMotion(track)
-        captureTrack.current = track
-        void applyQualityToTrack(track)
-        setStep("connecting")
-      }),
-    )
+    const screen$ = slot$(screenshare.isBroadcasting$, screenshare.video.broadcastTrack$, (track) => {
+      if (isPlaceholder(track)) {
+        captureTrack.current = null
+        setScreenTrack(null)
+        return
+      }
+      hintMotion(track)
+      captureTrack.current = track
+      setScreenTrack(track)
+      void applyQualityToTrack(track)
+      setStep("connecting")
+    })
+    const camera$ = slot$(cameraOn$, cameraTrack$, (track) => {
+      if (isPlaceholder(track)) {
+        setCameraTrack(null)
+        return
+      }
+      setCameraTrack(track)
+      setStep("connecting")
+    })
 
-    const video$ = partyTracks.push(capture$, { sendEncodings$: videoSendEncodings$ })
+    const screenMeta$ = partyTracks.push(screen$, { sendEncodings$: videoSendEncodings$ })
+    const cameraMeta$ = partyTracks.push(camera$, { sendEncodings$: cameraSendEncodings$ })
 
     // Audio is optional and its source is the user's to pick: the screen picker
     // only yields a track when "share audio" is ticked, and on some platforms
@@ -156,17 +238,36 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
     // down with it, so the screen is captured, nobody ever receives it and the
     // room reports nothing wrong. `error$` above only covers acquiring the
     // screen, never publishing it.
-    const subscription = combineLatest([video$, audio$]).subscribe({
-      next: ([videoMeta, audioMeta]) => {
-        const video = toTrackRef(videoMeta)
-        if (video === null) {
+    const subscription = combineLatest([
+      screenMeta$,
+      cameraMeta$,
+      audio$,
+      carriesMedia$(screen$),
+      carriesMedia$(camera$),
+    ]).subscribe({
+      next: ([screenMeta, cameraMeta, audioMeta, screenOn, cameraOn]) => {
+        const screen = toTrackRef(screenMeta)
+        const camera = toTrackRef(cameraMeta)
+        if (screen === null || camera === null) {
           setError("o SFU devolveu um endereço de trilha incompleto")
           return
         }
+
+        // Live, yet neither carries anything: a picker or a permission prompt is
+        // still open. Anything already announced would now be a placeholder,
+        // which nobody may pull.
+        if (!screenOn && !cameraOn) {
+          if (announcement.current === null) return
+          announcement.current = null
+          send({ type: "broadcast-stop" })
+          setStep("capturing")
+          return
+        }
+
         const message: ClientMessage = {
           type: "broadcast-start",
-          screen: video,
-          camera: null,
+          screen: screenOn ? screen : null,
+          camera: cameraOn ? camera : null,
           audio: toTrackRef(audioMeta),
         }
         setStep("announcing")
@@ -184,9 +285,11 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
       announcement.current = null
       captureTrack.current = null
       setAudioTrack(null)
+      setScreenTrack(null)
+      setCameraTrack(null)
       send({ type: "broadcast-stop" })
     }
-  }, [isBroadcasting, partyTracks, screenshare, send])
+  }, [isLive, partyTracks, screenshare, send])
 
   // A dropped socket costs us our participant entry on the server, so whatever
   // we were broadcasting has to be announced again on the new one.
@@ -197,12 +300,40 @@ export function useBroadcast(signaling: Signaling): Broadcasting {
     send(message)
   }, [connected, send])
 
-  const toggle = useCallback(() => {
+  const toggleScreen = useCallback(() => {
     screenshare.toggleBroadcasting()
   }, [screenshare])
 
+  const stop = useCallback(() => {
+    turnCameraOff()
+    if (isSharingScreen) screenshare.toggleBroadcasting()
+  }, [isSharingScreen, screenshare])
+
   return useMemo(
-    () => ({ isBroadcasting, error, step, audioTrack, toggle }),
-    [isBroadcasting, error, step, audioTrack, toggle],
+    () => ({
+      isLive,
+      isSharingScreen,
+      isCameraOn,
+      screenTrack,
+      cameraTrack,
+      error,
+      step,
+      audioTrack,
+      toggleScreen,
+      toggleCamera,
+      stop,
+    }),
+    [
+      isLive,
+      isSharingScreen,
+      isCameraOn,
+      screenTrack,
+      cameraTrack,
+      error,
+      step,
+      audioTrack,
+      toggleScreen,
+      stop,
+    ],
   )
 }

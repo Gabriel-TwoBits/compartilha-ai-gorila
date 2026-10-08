@@ -7,8 +7,17 @@ import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
 import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
 import { AudioModes } from "./AudioModes"
+import { CameraPanel } from "./CameraPanel"
 import { Download, hasDownload } from "./Download"
-import { DownloadIcon, ScreenIcon, SpeakerIcon, SpinnerIcon, StopIcon } from "./Icons"
+import {
+  CameraIcon,
+  CameraOffIcon,
+  DownloadIcon,
+  ScreenIcon,
+  SpeakerIcon,
+  SpinnerIcon,
+  StopIcon,
+} from "./Icons"
 import { AudioSource } from "./AudioSource"
 import { LevelMeter } from "./LevelMeter"
 import { Participants } from "./Participants"
@@ -22,7 +31,10 @@ type Props = {
   onLogout: () => void
 }
 
-/** Shared by the two toggles that open a panel above the footer. */
+/** The panels that open above the footer, one at a time. */
+type Panel = "audio" | "camera" | "download"
+
+/** Shared by the toggles that open a panel above the footer. */
 const panelButtonClassName =
   "flex items-center gap-1.5 rounded-md border border-edge bg-surface-raised px-2 py-1.5 text-xs text-ink transition hover:brightness-110"
 
@@ -49,7 +61,7 @@ function footerLine(
   broadcasterCount: number,
 ): ReactNode {
   if (broadcast.error !== null) return broadcast.error
-  if (broadcast.isBroadcasting && broadcast.step !== "live") {
+  if (broadcast.isLive && broadcast.step !== "live") {
     return (
       <>
         <SpinnerIcon />
@@ -81,17 +93,22 @@ export function RoomScreen({ nickname, onLogout }: Props) {
    * Which panel is open above the footer, if any. One at a time: they share
    * the strip, and stacking them would push the stage around.
    */
-  const [panel, setPanel] = useState<"audio" | "download" | null>(null)
+  const [panel, setPanel] = useState<Panel | null>(null)
   const bridge = desktopBridge()
   const picksOwnSource = bridge !== null && !bridge.usesPortal
 
-  function togglePanel(which: "audio" | "download"): void {
+  function togglePanel(which: Panel): void {
     setPanel((open) => (open === which ? null : which))
   }
 
+  /** Stopping takes the camera down too: "stop" means off the air, not "less". */
   function handleBroadcastClick(): void {
-    if (broadcast.isBroadcasting || !picksOwnSource) {
-      broadcast.toggle()
+    if (broadcast.isSharingScreen) {
+      broadcast.stop()
+      return
+    }
+    if (!picksOwnSource) {
+      broadcast.toggleScreen()
       return
     }
     setPickerOpen(true)
@@ -100,8 +117,12 @@ export function RoomScreen({ nickname, onLogout }: Props) {
   function startWith(source: DesktopSource): void {
     chooseSource(source)
     setPickerOpen(false)
-    broadcast.toggle()
+    broadcast.toggleScreen()
   }
+
+  /** Asked for and not yet open: the permission prompt or the device is slow. */
+  const cameraOpening = broadcast.isCameraOn && broadcast.cameraTrack === null
+  const cameraLabel = broadcast.isCameraOn ? "Desligar a câmera" : "Mostrar a câmera"
 
   const participants: Participant[] = signaling.room?.participants ?? []
   const you = signaling.room?.you ?? null
@@ -178,6 +199,8 @@ export function RoomScreen({ nickname, onLogout }: Props) {
           opened={openedNicknames}
           onOpen={openBroadcast}
           onClose={closeBroadcast}
+          localScreen={broadcast.screenTrack}
+          localCamera={broadcast.cameraTrack}
         />
         <Participants participants={participants} you={you} />
       </div>
@@ -185,6 +208,12 @@ export function RoomScreen({ nickname, onLogout }: Props) {
       {panel === "audio" && bridge !== null && (
         <div className="border-t border-edge px-4 py-3">
           <AudioModes />
+        </div>
+      )}
+
+      {panel === "camera" && (
+        <div className="border-t border-edge px-4 py-3">
+          <CameraPanel />
         </div>
       )}
 
@@ -200,7 +229,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         </p>
 
         <div className="flex items-center gap-3">
-          {broadcast.isBroadcasting && <LevelMeter track={broadcast.audioTrack} />}
+          {broadcast.isLive && <LevelMeter track={broadcast.audioTrack} />}
           <Quality />
           {bridge === null ? (
             <AudioSource />
@@ -232,15 +261,44 @@ export function RoomScreen({ nickname, onLogout }: Props) {
 
           <button
             type="button"
+            onClick={() => togglePanel("camera")}
+            aria-expanded={panel === "camera"}
+            className={panelButtonClassName}
+          >
+            <CameraIcon />
+            Câmera
+          </button>
+
+          {/* Apart from the screen button on purpose: the camera can go on
+              with the screen, on its own, or mid-broadcast. */}
+          <button
+            type="button"
+            onClick={broadcast.toggleCamera}
+            disabled={cameraOpening}
+            aria-pressed={broadcast.isCameraOn}
+            aria-label={cameraLabel}
+            title={cameraLabel}
+            className={[
+              "flex items-center rounded-lg p-2.5 text-sm transition hover:brightness-110 disabled:opacity-60",
+              broadcast.isCameraOn ? "bg-accent text-accent-ink" : "border border-edge bg-surface-raised text-ink",
+            ].join(" ")}
+          >
+            {cameraOpening && <SpinnerIcon />}
+            {!cameraOpening && broadcast.isCameraOn && <CameraIcon />}
+            {!broadcast.isCameraOn && <CameraOffIcon />}
+          </button>
+
+          <button
+            type="button"
             onClick={handleBroadcastClick}
             className={[
               "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition",
               "hover:brightness-110",
-              broadcast.isBroadcasting ? "bg-red-500 text-white" : "bg-accent text-accent-ink",
+              broadcast.isSharingScreen ? "bg-red-500 text-white" : "bg-accent text-accent-ink",
             ].join(" ")}
           >
-            {broadcast.isBroadcasting ? <StopIcon /> : <ScreenIcon />}
-            {broadcast.isBroadcasting ? "Parar transmissão" : "Transmitir minha tela"}
+            {broadcast.isSharingScreen ? <StopIcon /> : <ScreenIcon />}
+            {broadcast.isSharingScreen ? "Parar transmissão" : "Transmitir minha tela"}
           </button>
         </div>
       </footer>

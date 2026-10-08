@@ -1,6 +1,8 @@
 import {
   type ChangeEvent,
+  type PointerEvent,
   type ReactNode,
+  type WheelEvent,
   useCallback,
   useContext,
   useEffect,
@@ -9,12 +11,20 @@ import {
   useState,
 } from "react"
 import { type TrackMetadata, createAudioSink } from "partytracks/client"
-import { useObservable } from "partytracks/react"
 import { type Observable, of } from "rxjs"
 import type { Broadcast, Participant, TrackRef } from "@shared/protocol"
 import { useFullscreen } from "../fullscreen"
 import { TileChrome, usePointerIdle } from "../pointerIdle"
-import { getScreenshareSource, getWatchTracks } from "../tracks"
+import {
+  type Corner,
+  clampOverlayWidth,
+  handleCorner,
+  movedEnough,
+  nearestCorner,
+  parseCorner,
+  parseOverlayWidth,
+} from "../corners"
+import { getWatchTracks } from "../tracks"
 import {
   CloseIcon,
   EnterFullscreenIcon,
@@ -72,26 +82,363 @@ function remoteTrack$(sessionId: string, trackName: string): Observable<TrackMet
   return of({ location: "remote", sessionId, trackName })
 }
 
-/**
- * Our own screen, taken straight from the local capture rather than pulled back
- * from the SFU: identical picture, none of the round trip or the egress.
- */
-function LocalPreview() {
-  const screenshare = getScreenshareSource()
+/** Mirrors the picture horizontally, the way a person expects to see their own face. */
+const mirroredClassName = "-scale-x-100"
+
+/** A `<video>` showing one track, or black while there is none yet. */
+function TrackVideo({
+  track,
+  mirrored,
+  className,
+}: {
+  track: MediaStreamTrack | null
+  mirrored: boolean
+  className: string
+}) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
-  useObservable(screenshare.video.broadcastTrack$, (track) => {
+  useEffect(() => {
     const element = videoRef.current
     if (element === null) return
-    element.srcObject = new MediaStream([track])
-  })
+    element.srcObject = track === null ? null : new MediaStream([track])
+  }, [track])
 
-  return <video ref={videoRef} autoPlay playsInline muted className={videoClassName} />
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted
+      className={mirrored ? `${className} ${mirroredClassName}` : className}
+    />
+  )
 }
 
-function RemoteBroadcast({ broadcast, screen }: { broadcast: Broadcast; screen: TrackRef }) {
+const CORNER_STORAGE_KEY = "cag:camera-corner"
+const WIDTH_STORAGE_KEY = "cag:camera-width"
+
+/** How much one notch of the wheel grows or shrinks the overlay, in % of the tile. */
+const WHEEL_STEP_PERCENT = 2
+
+/** Turns a fraction of the tile's width into the percentage the overlay is sized in. */
+const PERCENT_PER_WHOLE = 100
+
+function readStored(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    // Private windows and blocked site data throw on access rather than
+    // returning null.
+    return null
+  }
+}
+
+function writeStored(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // The preference not surviving a reload is not worth failing over.
+  }
+}
+
+/**
+ * Clear of the floating header at the top and of the volume pill at the bottom,
+ * so the overlay never sits on a control.
+ */
+const CORNER_CLASS_NAMES: Record<Corner, string> = {
+  "bottom-right": "right-3 bottom-14",
+  "bottom-left": "left-3 bottom-14",
+  "top-right": "right-3 top-12",
+  "top-left": "left-3 top-12",
+}
+
+const HANDLE_CLASS_NAMES: Record<Corner, string> = {
+  "top-left": "top-0 left-0 cursor-nwse-resize",
+  "top-right": "top-0 right-0 cursor-nesw-resize",
+  "bottom-left": "bottom-0 left-0 cursor-nesw-resize",
+  "bottom-right": "bottom-0 right-0 cursor-nwse-resize",
+}
+
+type Drag = {
+  startX: number
+  startY: number
+  /** The overlay's offset inside the tile when the drag began. */
+  left: number
+  top: number
+  moved: boolean
+}
+
+type Resize = {
+  startX: number
+  initialWidth: number
+  tileWidth: number
+}
+
+/**
+ * The camera over the screen, as in a stream.
+ *
+ * Dragging moves it and letting go snaps it to the nearest corner; a click with
+ * no drag swaps it with the picture behind. Both gestures live on the same
+ * element, and movement is what tells them apart. The corner and the size are
+ * the viewer's preference and outlive the broadcast; nothing here travels over
+ * the network.
+ */
+function CameraOverlay({
+  track,
+  mirrored,
+  onSwap,
+}: {
+  track: MediaStreamTrack
+  mirrored: boolean
+  onSwap: () => void
+}) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const drag = useRef<Drag | null>(null)
+  const resize = useRef<Resize | null>(null)
+  const [corner, setCorner] = useState<Corner>(() => parseCorner(readStored(CORNER_STORAGE_KEY)))
+  const [width, setWidth] = useState(() => parseOverlayWidth(readStored(WIDTH_STORAGE_KEY)))
+  /** Where the overlay is while being dragged, in px from the tile's corner. */
+  const [dragged, setDragged] = useState<{ left: number; top: number } | null>(null)
+
+  /** Functional, since wheel notches arrive faster than renders. */
+  function changeWidth(update: (current: number) => number): void {
+    setWidth((current) => {
+      const clamped = clampOverlayWidth(update(current))
+      writeStored(WIDTH_STORAGE_KEY, String(clamped))
+      return clamped
+    })
+  }
+
+  function tileRect(): DOMRect | null {
+    return boxRef.current?.parentElement?.getBoundingClientRect() ?? null
+  }
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>): void {
+    const box = boxRef.current?.getBoundingClientRect()
+    const tile = tileRect()
+    if (box === undefined || tile === null) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    drag.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      left: box.left - tile.left,
+      top: box.top - tile.top,
+      moved: false,
+    }
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>): void {
+    const current = drag.current
+    if (current === null) return
+    const dx = event.clientX - current.startX
+    const dy = event.clientY - current.startY
+    if (movedEnough(dx, dy)) current.moved = true
+    if (current.moved) setDragged({ left: current.left + dx, top: current.top + dy })
+  }
+
+  function handlePointerUp(): void {
+    const current = drag.current
+    drag.current = null
+    setDragged(null)
+    if (current === null) return
+    if (!current.moved) {
+      onSwap()
+      return
+    }
+
+    const box = boxRef.current?.getBoundingClientRect()
+    const tile = tileRect()
+    if (box === undefined || tile === null) return
+    const next = nearestCorner(
+      { x: box.left + box.width / 2, y: box.top + box.height / 2 },
+      { left: tile.left, top: tile.top, width: tile.width, height: tile.height },
+    )
+    setCorner(next)
+    writeStored(CORNER_STORAGE_KEY, next)
+  }
+
+  // The handle's gestures stop at the handle: a resize must never also be read
+  // as a drag, nor end as a click that swaps the pictures.
+  function handleResizeDown(event: PointerEvent<HTMLSpanElement>): void {
+    event.stopPropagation()
+    const tile = tileRect()
+    if (tile === null) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    resize.current = { startX: event.clientX, initialWidth: width, tileWidth: tile.width }
+  }
+
+  function handleResizeMove(event: PointerEvent<HTMLSpanElement>): void {
+    const current = resize.current
+    if (current === null) return
+    event.stopPropagation()
+    // On the right-hand corners the handle faces left, so pulling left grows
+    // the overlay; without the flip the gesture runs backwards on two corners.
+    const direction = corner.endsWith("right") ? -1 : 1
+    const dx = direction * (event.clientX - current.startX)
+    changeWidth(() => current.initialWidth + (dx / current.tileWidth) * PERCENT_PER_WHOLE)
+  }
+
+  function handleResizeUp(event: PointerEvent<HTMLSpanElement>): void {
+    event.stopPropagation()
+    resize.current = null
+  }
+
+  function handleWheel(event: WheelEvent<HTMLDivElement>): void {
+    const step = Math.sign(event.deltaY) * WHEEL_STEP_PERCENT
+    changeWidth((current) => current - step)
+  }
+
+  const position = dragged === null ? CORNER_CLASS_NAMES[corner] : ""
+  const style = dragged === null ? { width: `${width}%` } : { width: `${width}%`, ...dragged }
+
+  return (
+    <div
+      ref={boxRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      onWheel={handleWheel}
+      title="Arraste para mover · clique para inverter · role para redimensionar"
+      style={style}
+      className={[
+        "group absolute z-[5] aspect-video touch-none overflow-hidden rounded-lg border border-edge bg-black shadow-xl",
+        dragged === null ? "cursor-grab" : "cursor-grabbing",
+        position,
+      ].join(" ")}
+    >
+      <TrackVideo track={track} mirrored={mirrored} className="size-full object-cover" />
+      <span
+        onPointerDown={handleResizeDown}
+        onPointerMove={handleResizeMove}
+        onPointerUp={handleResizeUp}
+        onPointerCancel={handleResizeUp}
+        title="Puxe para mudar o tamanho"
+        className={[
+          "absolute size-4 opacity-0 transition-opacity group-hover:opacity-100",
+          "bg-ink/60",
+          HANDLE_CLASS_NAMES[handleCorner(corner)],
+        ].join(" ")}
+      />
+    </div>
+  )
+}
+
+/**
+ * A broadcast's pictures: the screen in the back with the camera over it, or
+ * whichever of the two exists on its own.
+ *
+ * Swapping puts the camera in the back, the way a streamer does when the face
+ * starts to matter more than the game. It is a choice of the moment and is not
+ * remembered. Only the broadcaster sees their own camera mirrored; everyone
+ * else gets the real picture.
+ */
+function BroadcastView({
+  screen,
+  camera,
+  mirrorCamera,
+}: {
+  screen: MediaStreamTrack | null
+  camera: MediaStreamTrack | null
+  mirrorCamera: boolean
+}) {
+  const [swapped, setSwapped] = useState(false)
+
+  let background: MediaStreamTrack | null = screen
+  let overlay: MediaStreamTrack | null = null
+  if (screen === null) {
+    background = camera
+  } else if (camera !== null) {
+    background = swapped ? camera : screen
+    overlay = swapped ? screen : camera
+  } else {
+    // Screen alone: nothing to put over it, nothing to swap.
+  }
+
+  const mirrorBackground = mirrorCamera && background !== null && background === camera
+  const mirrorOverlay = mirrorCamera && overlay !== null && overlay === camera
+
+  return (
+    <>
+      <TrackVideo track={background} mirrored={mirrorBackground} className={videoClassName} />
+      {overlay !== null && (
+        <CameraOverlay
+          track={overlay}
+          mirrored={mirrorOverlay}
+          onSwap={() => setSwapped((current) => !current)}
+        />
+      )}
+    </>
+  )
+}
+
+/**
+ * One remote track, pulled while its address is known and dropped when it goes.
+ *
+ * Deps are the primitive parts of the address: the objects arrive fresh from
+ * JSON on every room snapshot, so memoizing on them would rebuild the pull on
+ * every render.
+ */
+function usePulledTrack(ref: TrackRef | null): MediaStreamTrack | null {
   const partyTracks = getWatchTracks()
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const sessionId = ref?.sessionId ?? null
+  const trackName = ref?.trackName ?? null
+  const [track, setTrack] = useState<MediaStreamTrack | null>(null)
+
+  useEffect(() => {
+    if (sessionId === null || trackName === null) return undefined
+    const subscription = partyTracks
+      .pull(remoteTrack$(sessionId, trackName))
+      .subscribe((pulled) => setTrack(pulled))
+    return () => {
+      subscription.unsubscribe()
+      setTrack(null)
+    }
+  }, [partyTracks, sessionId, trackName])
+
+  return track
+}
+
+/**
+ * The last address a track was announced at, kept while it is announced off.
+ *
+ * Turning the camera or the screen off only swaps the publisher's track for a
+ * placeholder; the address stays the same. Closing the pull there and pulling
+ * again when it comes back renegotiates the viewer's session, which freezes the
+ * other picture, and the SFU then refuses the second pull with 410 Gone. So a
+ * track, once pulled, stays pulled for the whole broadcast and is merely hidden
+ * while off.
+ */
+function useStickyTrackRef(ref: TrackRef | null): TrackRef | null {
+  const [sticky, setSticky] = useState<TrackRef | null>(ref)
+  const sessionId = ref?.sessionId ?? null
+  const trackName = ref?.trackName ?? null
+
+  useEffect(() => {
+    if (sessionId === null || trackName === null) return
+    setSticky((current) => {
+      if (current?.sessionId === sessionId && current.trackName === trackName) return current
+      return { sessionId, trackName }
+    })
+  }, [sessionId, trackName])
+
+  return sticky
+}
+
+/**
+ * Our own broadcast, taken straight from the local captures rather than pulled
+ * back from the SFU: identical picture, none of the round trip or the egress.
+ */
+function LocalBroadcast({ screen, camera }: { screen: MediaStreamTrack | null; camera: MediaStreamTrack | null }) {
+  return (
+    <div className="relative size-full">
+      <BroadcastView screen={screen} camera={camera} mirrorCamera />
+    </div>
+  )
+}
+
+function RemoteBroadcast({ broadcast }: { broadcast: Broadcast }) {
+  const partyTracks = getWatchTracks()
   const audioRef = useRef<HTMLAudioElement>(null)
   const [audioBlocked, setAudioBlocked] = useState(false)
   const [volume, setVolume] = useState(DEFAULT_VOLUME)
@@ -101,28 +448,18 @@ function RemoteBroadcast({ broadcast, screen }: { broadcast: Broadcast; screen: 
   /** The slider at the bottom is silence too, and the icon has to say so. */
   const silent = muted || volume === 0
 
-  // Deps are the primitive parts of the address: the objects arrive fresh from
-  // JSON on every room snapshot, so memoizing on them would rebuild the pull on
-  // every render.
-  const { sessionId: videoSession, trackName: videoTrack } = screen
+  // Nothing is pulled before its address is announced: until then the track
+  // carries the placeholder, which the SFU would never finish delivering.
+  const screenTrack = usePulledTrack(useStickyTrackRef(broadcast.screen))
+  const cameraTrack = usePulledTrack(useStickyTrackRef(broadcast.camera))
+
   const audioSession = broadcast.audio?.sessionId ?? null
   const audioTrack = broadcast.audio?.trackName ?? null
-
-  const videoTrack$ = useMemo(
-    () => partyTracks.pull(remoteTrack$(videoSession, videoTrack)),
-    [partyTracks, videoSession, videoTrack],
-  )
 
   const audioTrack$ = useMemo(() => {
     if (audioSession === null || audioTrack === null) return null
     return partyTracks.pull(remoteTrack$(audioSession, audioTrack))
   }, [partyTracks, audioSession, audioTrack])
-
-  useObservable(videoTrack$, (track) => {
-    const element = videoRef.current
-    if (element === null) return
-    element.srcObject = new MediaStream([track])
-  })
 
   const startAudio = useCallback(() => {
     const element = audioRef.current
@@ -181,7 +518,11 @@ function RemoteBroadcast({ broadcast, screen }: { broadcast: Broadcast; screen: 
 
   return (
     <div className="relative size-full">
-      <video ref={videoRef} autoPlay playsInline muted className={videoClassName} />
+      <BroadcastView
+        screen={broadcast.screen === null ? null : screenTrack}
+        camera={broadcast.camera === null ? null : cameraTrack}
+        mirrorCamera={false}
+      />
       <audio ref={audioRef} />
 
       {audioTrack$ === null && (
@@ -387,9 +728,20 @@ type Props = {
   opened: string[]
   onOpen: (nickname: string) => void
   onClose: (nickname: string) => void
+  /** Our own captures, shown in our tile instead of a copy pulled back from the SFU. */
+  localScreen: MediaStreamTrack | null
+  localCamera: MediaStreamTrack | null
 }
 
-export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
+export function Stage({
+  broadcasters,
+  you,
+  opened,
+  onOpen,
+  onClose,
+  localScreen,
+  localCamera,
+}: Props) {
   if (broadcasters.length === 0) {
     return (
       <section className={`m-4 flex-1 ${frameClassName}`}>
@@ -405,14 +757,18 @@ export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
 
         // The caller filters these out; the type still admits one.
         if (broadcast === null) return null
-        if (broadcast.screen === null) return null
 
-        // Our own screen comes from the local capture, so there is nothing to
-        // open and nothing to stop paying for.
+        // Our own broadcast comes from the local captures, so there is nothing
+        // to open and nothing to stop paying for.
         if (nickname === you) {
           return (
-            <Tile key={nickname} label="Sua tela" action={null} fullscreenable>
-              <LocalPreview />
+            <Tile
+              key={nickname}
+              label={broadcast.screen === null ? "Sua câmera" : "Sua tela"}
+              action={null}
+              fullscreenable
+            >
+              <LocalBroadcast screen={localScreen} camera={localCamera} />
             </Tile>
           )
         }
@@ -432,12 +788,7 @@ export function Stage({ broadcasters, you, opened, onOpen, onClose }: Props) {
             action={<StopWatchingButton onClose={() => onClose(nickname)} />}
             fullscreenable
           >
-            {/* Keyed on the address so a republished track remounts with fresh pulls. */}
-            <RemoteBroadcast
-              key={`${broadcast.screen.sessionId}/${broadcast.screen.trackName}`}
-              broadcast={broadcast}
-              screen={broadcast.screen}
-            />
+            <RemoteBroadcast broadcast={broadcast} />
           </Tile>
         )
       })}
