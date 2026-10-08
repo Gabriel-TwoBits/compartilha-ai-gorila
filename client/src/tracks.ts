@@ -68,6 +68,19 @@ export function getScreenshareSource(): ScreenSource {
 }
 
 /**
+ * Whether this device can share its screen at all.
+ *
+ * Mobile browsers have no `getDisplayMedia`, neither Chrome on Android nor
+ * Safari on iOS, so there the screen controls would only ever fail; the camera
+ * still works. The desktop app always captures through its own source.
+ */
+export function canShareScreen(): boolean {
+  if (isDesktop()) return true
+  const devices: MediaDevices | undefined = navigator.mediaDevices
+  return typeof devices?.getDisplayMedia === "function"
+}
+
+/**
  * Caps what the video encoder sends, following the picker.
  *
  * `PartyTracks.push` applies every emission, so changing preset mid-broadcast

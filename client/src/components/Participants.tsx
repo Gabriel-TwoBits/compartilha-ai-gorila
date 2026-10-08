@@ -19,7 +19,7 @@ type Props = {
 /** Presence only: opening and closing a broadcast happens on the stage tiles. */
 export function Participants({ participants, you }: Props) {
   return (
-    <aside className="flex w-64 shrink-0 flex-col gap-1 border-l border-edge p-4">
+    <aside className="flex max-h-40 shrink-0 flex-col gap-1 overflow-y-auto border-t border-edge p-4 md:max-h-none md:w-64 md:border-t-0 md:border-l">
       <h2 className="mb-3 text-xs font-medium tracking-widest text-ink-muted uppercase">
         Na sala — {participants.length}
       </h2>

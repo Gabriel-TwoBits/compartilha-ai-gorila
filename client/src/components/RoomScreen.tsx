@@ -3,6 +3,7 @@ import type { Participant } from "@shared/protocol"
 import { logout } from "../api"
 import { type DesktopSource, desktopBridge } from "../desktop"
 import { chooseSource } from "../desktopScreenshare"
+import { canShareScreen } from "../tracks"
 import { type Broadcasting, describeStep, useBroadcast } from "../useBroadcast"
 import { useRoomSounds } from "../useRoomSounds"
 import { useSignaling } from "../useSignaling"
@@ -123,6 +124,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
   /** Asked for and not yet open: the permission prompt or the device is slow. */
   const cameraOpening = broadcast.isCameraOn && broadcast.cameraTrack === null
   const cameraLabel = broadcast.isCameraOn ? "Desligar a câmera" : "Mostrar a câmera"
+  const screenSharing = canShareScreen()
 
   const participants: Participant[] = signaling.room?.participants ?? []
   const you = signaling.room?.you ?? null
@@ -189,7 +191,8 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         </div>
       </header>
 
-      <div className="relative flex min-h-0 flex-1">
+      {/* Stacked on a phone, where a sidebar would squeeze the stage into a sliver. */}
+      <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
         {pickerOpen && (
           <SourcePicker onChoose={startWith} onCancel={() => setPickerOpen(false)} />
         )}
@@ -201,6 +204,7 @@ export function RoomScreen({ nickname, onLogout }: Props) {
           onClose={closeBroadcast}
           localScreen={broadcast.screenTrack}
           localCamera={broadcast.cameraTrack}
+          canShareScreen={screenSharing}
         />
         <Participants participants={participants} you={you} />
       </div>
@@ -223,40 +227,45 @@ export function RoomScreen({ nickname, onLogout }: Props) {
         </div>
       )}
 
-      <footer className="flex items-center justify-between gap-4 px-4 py-3">
+      <footer className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
         <p className="flex items-center gap-2 font-mono text-xs text-ink-muted">
           {footerLine(broadcast, signaling.connected, broadcasters.length)}
         </p>
 
-        <div className="flex items-center gap-3">
-          {broadcast.isLive && <LevelMeter track={broadcast.audioTrack} />}
-          <Quality />
-          {bridge === null ? (
-            <AudioSource />
-          ) : (
-            <button
-              type="button"
-              onClick={() => togglePanel("audio")}
-              aria-expanded={panel === "audio"}
-              className={panelButtonClassName}
-            >
-              <SpeakerIcon />
-              Áudio
-            </button>
-          )}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Everything here exists for the screen share, which a phone cannot do. */}
+          {screenSharing && (
+            <>
+              {broadcast.isLive && <LevelMeter track={broadcast.audioTrack} />}
+              <Quality />
+              {bridge === null ? (
+                <AudioSource />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => togglePanel("audio")}
+                  aria-expanded={panel === "audio"}
+                  className={panelButtonClassName}
+                >
+                  <SpeakerIcon />
+                  Áudio
+                </button>
+              )}
 
-          {/* Where the need actually shows up: somebody goes to broadcast
-              and finds the browser will not carry the game's sound. */}
-          {hasDownload() && (
-            <button
-              type="button"
-              onClick={() => togglePanel("download")}
-              aria-expanded={panel === "download"}
-              className={panelButtonClassName}
-            >
-              <DownloadIcon />
-              Baixar o app
-            </button>
+              {/* Where the need actually shows up: somebody goes to broadcast
+                  and finds the browser will not carry the game's sound. */}
+              {hasDownload() && (
+                <button
+                  type="button"
+                  onClick={() => togglePanel("download")}
+                  aria-expanded={panel === "download"}
+                  className={panelButtonClassName}
+                >
+                  <DownloadIcon />
+                  Baixar o app
+                </button>
+              )}
+            </>
           )}
 
           <button
@@ -288,18 +297,20 @@ export function RoomScreen({ nickname, onLogout }: Props) {
             {!broadcast.isCameraOn && <CameraOffIcon />}
           </button>
 
-          <button
-            type="button"
-            onClick={handleBroadcastClick}
-            className={[
-              "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition",
-              "hover:brightness-110",
-              broadcast.isSharingScreen ? "bg-red-500 text-white" : "bg-accent text-accent-ink",
-            ].join(" ")}
-          >
-            {broadcast.isSharingScreen ? <StopIcon /> : <ScreenIcon />}
-            {broadcast.isSharingScreen ? "Parar transmissão" : "Transmitir minha tela"}
-          </button>
+          {screenSharing && (
+            <button
+              type="button"
+              onClick={handleBroadcastClick}
+              className={[
+                "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition",
+                "hover:brightness-110",
+                broadcast.isSharingScreen ? "bg-red-500 text-white" : "bg-accent text-accent-ink",
+              ].join(" ")}
+            >
+              {broadcast.isSharingScreen ? <StopIcon /> : <ScreenIcon />}
+              {broadcast.isSharingScreen ? "Parar transmissão" : "Transmitir minha tela"}
+            </button>
+          )}
         </div>
       </footer>
     </div>

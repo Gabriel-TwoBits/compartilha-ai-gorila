@@ -701,7 +701,22 @@ function StopWatchingButton({ onClose }: { onClose: () => void }) {
   )
 }
 
-function EmptyStage() {
+function EmptyStage({ canShareScreen }: { canShareScreen: boolean }) {
+  if (!canShareScreen) {
+    return (
+      <div className="flex size-full flex-col items-center justify-center gap-4 px-8 text-center">
+        <span className="flex size-20 items-center justify-center rounded-2xl bg-surface-raised text-4xl">
+          📷
+        </span>
+        <h2 className="text-lg font-semibold">Ninguém transmitindo agora</h2>
+        <p className="max-w-md text-sm leading-relaxed text-ink-muted">
+          Este aparelho não compartilha a tela, mas pode mostrar a câmera: toque no botão da
+          câmera ali embaixo.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex size-full flex-col items-center justify-center gap-4 px-8 text-center">
       <span className="flex size-20 items-center justify-center rounded-2xl bg-surface-raised text-4xl">
@@ -731,6 +746,8 @@ type Props = {
   /** Our own captures, shown in our tile instead of a copy pulled back from the SFU. */
   localScreen: MediaStreamTrack | null
   localCamera: MediaStreamTrack | null
+  /** False on a phone, whose browser cannot share its screen. */
+  canShareScreen: boolean
 }
 
 export function Stage({
@@ -741,11 +758,12 @@ export function Stage({
   onClose,
   localScreen,
   localCamera,
+  canShareScreen,
 }: Props) {
   if (broadcasters.length === 0) {
     return (
       <section className={`m-4 flex-1 ${frameClassName}`}>
-        <EmptyStage />
+        <EmptyStage canShareScreen={canShareScreen} />
       </section>
     )
   }
