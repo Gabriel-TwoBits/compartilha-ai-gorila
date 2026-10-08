@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  CAMERA_PRESET,
   QUALITY_PRESETS,
   captureConstraints,
   currentQuality,
@@ -26,6 +27,11 @@ describe("quality presets", () => {
       expect(preset.width * preset.height).toBeLessThanOrEqual(HIGHEST_ALLOWED_PIXELS)
       expect(preset.frameRate).toBeLessThanOrEqual(HIGHEST_ALLOWED_FRAMERATE)
     }
+  })
+
+  it("keeps the camera under half of the cheapest screen preset", () => {
+    const cheapest = Math.min(...QUALITY_PRESETS.map((preset) => preset.maxBitrate))
+    expect(CAMERA_PRESET.maxBitrate * 2).toBeLessThanOrEqual(cheapest)
   })
 
   it("never offers 1080p60 or anything at 1440p", () => {

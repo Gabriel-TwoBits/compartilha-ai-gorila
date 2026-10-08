@@ -50,6 +50,22 @@ export const QUALITY_PRESETS: QualityPreset[] = [
 ]
 
 /**
+ * The camera's fixed ceiling, with no picker of its own.
+ *
+ * A face needs far less than a game, and every viewer of a broadcast pulls the
+ * camera on top of the screen: at 540p30 and 1 Mbps it adds under half of the
+ * cheapest screen preset to the bill, where 720p would nearly double it.
+ */
+export const CAMERA_PRESET: QualityPreset = {
+  id: "camera",
+  label: "540p 30fps",
+  width: 960,
+  height: 540,
+  frameRate: 30,
+  maxBitrate: 1_000_000,
+}
+
+/**
  * The cheapest preset, and plenty for watching someone play. Raising it is one
  * click, and the estimate beside each option is what makes that an informed one.
  */
