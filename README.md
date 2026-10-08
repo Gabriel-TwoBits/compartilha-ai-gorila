@@ -1,8 +1,8 @@
 # CompartilhaAíGorila
 
 A single room where a group of friends walks in, someone shares their screen
-**with audio** and everyone else watches. No camera, no microphone — the voice
-conversation stays on Discord.
+**with audio** — and their camera, if they like — and everyone else watches. No
+microphone — the voice conversation stays on Discord.
 
 Video forwarding is handled by the [Cloudflare Realtime
 SFU](https://developers.cloudflare.com/realtime/sfu/), which comes with 1,000
@@ -130,6 +130,11 @@ where it does:
 | 720p60 | 4.5 Mbps | 2.0 | ~125 h/month |
 | 1080p30 | 5.0 Mbps | 2.2 | ~112 h/month |
 
+The camera has a single fixed ceiling, 540p30 at 1 Mbps (~0.45 GB/h per viewer),
+because every viewer of a broadcast pulls it on top of the screen. With the
+default screen preset, four people watching screen and camera together get
+~160 h/month; 720p for the camera would have nearly doubled what it adds.
+
 1080p60 (9 Mbps) and 1440p60 (16 Mbps) are not offered at all — the second would
 spend the month's quota over a couple of weekends. A test pins the ceiling, so
 adding one is a deliberate act rather than an oversight.
@@ -144,6 +149,49 @@ quota, and a viewer who falls back to a relay costs roughly double: their video
 crosses the relay as well as the SFU. That only happens to whoever cannot reach
 the SFU directly, and for them the alternative is a black screen — but it is
 worth knowing which number it comes out of.
+
+---
+
+## Camera
+
+The camera button sits apart from the screen button, as on Discord: the camera
+can go out with the screen, on its own, or be switched on and off in the middle
+of either without taking anything down. **Stop broadcast** takes both off the
+air.
+
+**The screen and the camera are two separate video tracks** in the SFU, never
+one composited picture. Compositing would be simpler, but it would take the
+layout away from the viewer: each viewer drags the camera overlay to the corner
+they want, resizes it, and clicks it to swap it with the screen behind. None of
+that travels over the network, and the corner and size are remembered per
+browser.
+
+- **Both tracks are published for the whole broadcast**, each carrying a black
+  placeholder while its source is off. Turning one on is then a
+  `replaceTrack`, not a renegotiation with the SFU, which would make the video
+  of everyone watching flicker.
+- **The placeholder is repainted every second.** A canvas capture yields a frame
+  only when the canvas changes, and partytracks withholds a push's address until
+  the sender has put bytes on the wire: painted once, the broadcast is never
+  announced.
+- **An address is announced only while its track carries real media.** A viewer
+  must never pull the placeholder — a still canvas yields almost no frames and
+  the SFU never finishes delivering it.
+- **A viewer keeps a track pulled for the whole broadcast** and only hides it
+  while it is announced off. Closing the pull and pulling again when the camera
+  came back froze the screen and drew a `410 Gone` from the SFU.
+- **Only the broadcaster sees their own camera mirrored** (`-scale-x-100` in
+  CSS), the way a person expects to see their face; viewers get the real picture.
+- **Nothing asks for the camera before a click.** Asking lights the webcam's
+  LED, which is alarming when nobody meant to turn it on — so the camera panel
+  lists devices only after **Ver câmeras**, and the choice is saved per browser.
+- **The capture asks with `ideal`, not `max` or `exact`.** A camera has a fixed
+  list of modes, and a hard constraint it cannot meet fails instead of settling
+  for the nearest. The encoder ceiling is what bounds the bill.
+
+No webcam is needed to try it: Chromium started with
+`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream` offers an
+animated test pattern as a camera.
 
 ---
 
@@ -457,11 +505,15 @@ out of their own app.
 | `server/room.ts` | Room state, in memory |
 | `server/signaling.ts` | WebSocket: presence and track addresses |
 | `server/main.ts` | HTTP routes and boot |
-| `client/src/useBroadcast.ts` | Publishes the screen to the SFU and announces it to the room |
+| `client/src/useBroadcast.ts` | Publishes the screen and the camera to the SFU and announces them to the room |
+| `client/src/camera.ts` | Which camera the broadcast uses, and its capture |
+| `client/src/placeholder.ts` | The black track that holds an idle source's place |
+| `client/src/corners.ts` | Where the camera overlay settles, and its size limits |
 | `client/src/tracks.ts` | The two PartyTracks sessions, and which screen source is in use |
 | `client/src/quality.ts` | The preset table, and what each one costs per viewer |
 | `client/src/audioSource.ts` | Which audio source the broadcast uses, and its capture |
-| `client/src/components/Stage.tsx` | Main panel: local preview or remote track |
+| `client/src/components/Stage.tsx` | Main panel: local preview or remote tracks, with the camera overlay |
+| `client/src/components/CameraPanel.tsx` | Camera picker with a preview |
 | `scripts/share.ts` | Build, server and quick tunnel in one command (`pnpm share`) |
 | `scripts/gorila.service` | systemd user unit that keeps the server up across reboots |
 | `desktop/src/main.ts` | The app's window, IPC and lifecycle |
