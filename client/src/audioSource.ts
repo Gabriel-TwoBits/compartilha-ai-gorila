@@ -1,18 +1,6 @@
-import {
-  BehaviorSubject,
-  Observable,
-  Subject,
-  catchError,
-  defer,
-  from,
-  fromEvent,
-  map,
-  merge,
-  of,
-  shareReplay,
-  switchMap,
-} from "rxjs"
+import { BehaviorSubject, Observable, Subject } from "rxjs"
 import { isDesktop } from "./desktop"
+import { inputDevices$, mediaDevices, stopStream } from "./mediaInputs"
 import { processAudioTrack$ } from "./processAudio"
 
 /**
@@ -67,36 +55,13 @@ export function audioSourceTrack$(
   return audioInputTrack$(sourceId)
 }
 
-/** `navigator.mediaDevices` is absent on an insecure origin, where none of this works. */
-function mediaDevices(): MediaDevices {
-  const available: MediaDevices | undefined = navigator.mediaDevices
-  if (available === undefined) {
-    throw new Error("captura de áudio exige HTTPS ou localhost")
-  }
-  return available
-}
-
 /** Fires when a fresh capture grant may have revealed the device names. */
 const audioInputsRevealed = new Subject<void>()
 
-/**
- * The inputs offered in the picker, re-read on every hotplug and after a grant.
- *
- * Enumerating directly rather than through partytracks' `devices$`, which asks
- * the Permissions API about the camera — a descriptor Firefox rejects, taking
- * the whole device list down with it. An enumeration that fails outright (an
- * insecure origin has no `navigator.mediaDevices`) leaves the picker empty; the
- * button beside it is what reports why.
- */
-export const audioInputs$: Observable<MediaDeviceInfo[]> = defer(() => {
-  const devices = mediaDevices()
-  return merge(of(null), fromEvent(devices, "devicechange"), audioInputsRevealed).pipe(
-    switchMap(() => from(devices.enumerateDevices())),
-  )
-}).pipe(
-  map((devices) => devices.filter((device) => device.kind === "audioinput")),
-  catchError(() => of([])),
-  shareReplay({ bufferSize: 1, refCount: true }),
+/** The inputs offered in the picker, re-read on every hotplug and after a grant. */
+export const audioInputs$: Observable<MediaDeviceInfo[]> = inputDevices$(
+  "audioinput",
+  audioInputsRevealed,
 )
 
 /**
@@ -123,10 +88,6 @@ const CAPTURE_CONSTRAINTS = {
   noiseSuppression: false,
   autoGainControl: false,
 } satisfies MediaTrackConstraints
-
-function stopStream(stream: MediaStream): void {
-  for (const track of stream.getTracks()) track.stop()
-}
 
 /** Captures one specific input, or fails — it never falls back to another device. */
 export function audioInputTrack$(deviceId: string): Observable<MediaStreamTrack> {
