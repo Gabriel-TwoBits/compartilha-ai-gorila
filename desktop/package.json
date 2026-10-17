@@ -5,7 +5,7 @@
   "description": "Desktop shell for CompartilhaAiGorila: its own screen picker, and per-application audio",
   "license": "AGPL-3.0-only",
   "main": "dist/main.cjs",
-  "homepage": "https://codeberg.org/Gabriel-TwoBits/compartilha-ai-gorila",
+  "homepage": "https://github.com/Gabriel-TwoBits/compartilha-ai-gorila",
   "author": "Gabriel-TwoBits",
   "desktopName": "compartilha-ai-gorila.desktop",
   "scripts": {
